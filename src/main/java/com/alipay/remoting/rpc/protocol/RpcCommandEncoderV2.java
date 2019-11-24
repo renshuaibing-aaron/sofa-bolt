@@ -16,11 +16,6 @@
  */
 package com.alipay.remoting.rpc.protocol;
 
-import java.io.Serializable;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.alipay.remoting.CommandEncoder;
 import com.alipay.remoting.Connection;
 import com.alipay.remoting.config.switches.ProtocolSwitch;
@@ -28,19 +23,24 @@ import com.alipay.remoting.rpc.RequestCommand;
 import com.alipay.remoting.rpc.ResponseCommand;
 import com.alipay.remoting.rpc.RpcCommand;
 import com.alipay.remoting.util.CrcUtil;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.Attribute;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.Serializable;
 
 /**
  * Encode remoting command into ByteBuf v2.
- * 
+ *
  * @author jiangping
  * @version $Id: RpcCommandEncoderV2.java, v 0.1 2017-05-27 PM8:11:27 tao Exp $
  */
 public class RpcCommandEncoderV2 implements CommandEncoder {
-    /** logger */
+    /**
+     * logger
+     */
     private static final Logger logger = LoggerFactory.getLogger("RpcRemoting");
 
     /**
@@ -48,6 +48,7 @@ public class RpcCommandEncoderV2 implements CommandEncoder {
      */
     @Override
     public void encode(ChannelHandlerContext ctx, Serializable msg, ByteBuf out) throws Exception {
+        System.out.println("===========RpcCommandEncoderV2.encode================");
         try {
             if (msg instanceof RpcCommand) {
                 /*
@@ -106,7 +107,7 @@ public class RpcCommandEncoderV2 implements CommandEncoder {
                     out.writeBytes(cmd.getContent());
                 }
                 if (ver == RpcProtocolV2.PROTOCOL_VERSION_2
-                    && cmd.getProtocolSwitch().isOn(ProtocolSwitch.CRC_SWITCH_INDEX)) {
+                        && cmd.getProtocolSwitch().isOn(ProtocolSwitch.CRC_SWITCH_INDEX)) {
                     // compute the crc32 and write to out
                     byte[] frame = new byte[out.readableBytes()];
                     out.getBytes(index, frame);

@@ -16,29 +16,28 @@
  */
 package com.alipay.remoting;
 
-import java.net.InetSocketAddress;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.slf4j.Logger;
-
 import com.alipay.remoting.config.AbstractConfigurableInstance;
 import com.alipay.remoting.config.configs.ConfigType;
 import com.alipay.remoting.log.BoltLoggerFactory;
+import org.slf4j.Logger;
+
+import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Server template for remoting.
- * 
+ *
  * @author jiangping
  * @version $Id: AbstractRemotingServer.java, v 0.1 2015-9-5 PM7:37:48 tao Exp $
  */
 public abstract class AbstractRemotingServer extends AbstractConfigurableInstance implements
-                                                                                 RemotingServer {
+        RemotingServer {
 
-    private static final Logger logger  = BoltLoggerFactory.getLogger("CommonDefault");
+    private static final Logger logger = BoltLoggerFactory.getLogger("CommonDefault");
 
-    private AtomicBoolean       started = new AtomicBoolean(false);
-    private String              ip;
-    private int                 port;
+    private AtomicBoolean started = new AtomicBoolean(false);
+    private String ip;
+    private int port;
 
     public AbstractRemotingServer(int port) {
         this(new InetSocketAddress(port).getAddress().getHostAddress(), port);
@@ -59,9 +58,12 @@ public abstract class AbstractRemotingServer extends AbstractConfigurableInstanc
     public boolean start() {
         if (started.compareAndSet(false, true)) {
             try {
+                //服务端的初始化
                 doInit();
 
                 logger.warn("Prepare to start server on port {} ", port);
+
+                //启动服务端
                 if (doStart()) {
                     logger.warn("Server started on port {}", port);
                     return true;

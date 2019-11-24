@@ -16,61 +16,72 @@
  */
 package com.alipay.remoting.rpc.common;
 
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.junit.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.alipay.remoting.BizContext;
 import com.alipay.remoting.InvokeContext;
 import com.alipay.remoting.NamedThreadFactory;
 import com.alipay.remoting.rpc.protocol.SyncUserProcessor;
+import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
+ * 自定义的业务逻辑用户处理器
+ * 注意：
+ * 对于所有的请求数据的类型，都必须有 UserProcessor 可以处理（感兴趣），
+ * 否则将抛出 RpcServerException 异常，类似于 "RpcServerException：No user processor found for request: java.lang.String"
+ */
+/**
  * a demo user processor for rpc server
- * 
+ *
  * @author xiaomin.cxm
  * @version $Id: SimpleServerUserProcessor.java, v 0.1 Jan 7, 2016 3:01:49 PM xiaomin.cxm Exp $
  */
 public class SimpleServerUserProcessor extends SyncUserProcessor<RequestBody> {
 
-    /** logger */
-    private static final Logger logger         = LoggerFactory
-                                                   .getLogger(SimpleServerUserProcessor.class);
+    /**
+     * logger
+     */
+    private static final Logger logger = LoggerFactory
+            .getLogger(SimpleServerUserProcessor.class);
 
-    /** delay milliseconds */
-    private long                delayMs;
+    /**
+     * delay milliseconds
+     */
+    private long delayMs;
 
-    /** whether delay or not */
-    private boolean             delaySwitch;
+    /**
+     * whether delay or not
+     */
+    private boolean delaySwitch;
 
-    /** executor */
-    private ThreadPoolExecutor  executor;
+    /**
+     * executor
+     */
+    private ThreadPoolExecutor executor;
 
-    /** default is true */
-    private boolean             timeoutDiscard = true;
+    /**
+     * default is true
+     */
+    private boolean timeoutDiscard = true;
 
-    private AtomicInteger       invokeTimes    = new AtomicInteger();
+    private AtomicInteger invokeTimes = new AtomicInteger();
 
-    private AtomicInteger       onewayTimes    = new AtomicInteger();
-    private AtomicInteger       syncTimes      = new AtomicInteger();
-    private AtomicInteger       futureTimes    = new AtomicInteger();
-    private AtomicInteger       callbackTimes  = new AtomicInteger();
+    private AtomicInteger onewayTimes = new AtomicInteger();
+    private AtomicInteger syncTimes = new AtomicInteger();
+    private AtomicInteger futureTimes = new AtomicInteger();
+    private AtomicInteger callbackTimes = new AtomicInteger();
 
-    private String              remoteAddr;
-    private CountDownLatch      latch          = new CountDownLatch(1);
+    private String remoteAddr;
+    private CountDownLatch latch = new CountDownLatch(1);
 
     public SimpleServerUserProcessor() {
         this.delaySwitch = false;
         this.delayMs = 0;
         this.executor = new ThreadPoolExecutor(1, 3, 60, TimeUnit.SECONDS,
-            new ArrayBlockingQueue<Runnable>(4), new NamedThreadFactory("Request-process-pool"));
+                new ArrayBlockingQueue<Runnable>(4), new NamedThreadFactory("Request-process-pool"));
     }
 
     public SimpleServerUserProcessor(long delay) {
@@ -86,7 +97,7 @@ public class SimpleServerUserProcessor extends SyncUserProcessor<RequestBody> {
                                      int workQueue) {
         this(delay);
         this.executor = new ThreadPoolExecutor(core, max, keepaliveSeconds, TimeUnit.SECONDS,
-            new ArrayBlockingQueue<Runnable>(workQueue), new NamedThreadFactory(
+                new ArrayBlockingQueue<Runnable>(workQueue), new NamedThreadFactory(
                 "Request-process-pool"));
     }
 
@@ -94,8 +105,9 @@ public class SimpleServerUserProcessor extends SyncUserProcessor<RequestBody> {
 
     @Override
     public Object handleRequest(BizContext bizCtx, RequestBody request) throws Exception {
-        logger.warn("Request received:" + request + ", timeout:" + bizCtx.getClientTimeout()
-                    + ", arriveTimestamp:" + bizCtx.getArriveTimestamp());
+        System.out.println("=====handleRequest================"+request);
+        logger.info("Request received:" + request + ", timeout:" + bizCtx.getClientTimeout()
+                + ", arriveTimestamp:" + bizCtx.getArriveTimestamp());
 
         if (bizCtx.isRequestTimeout()) {
             String errMsg = "Stop process in server biz thread, already timeout!";
@@ -117,7 +129,7 @@ public class SimpleServerUserProcessor extends SyncUserProcessor<RequestBody> {
         }
 
         latch.countDown();
-        logger.warn("Server User processor say, remote address is [" + this.remoteAddr + "].");
+        logger.info("Server User processor say, remote address is [" + this.remoteAddr + "].");
         Assert.assertEquals(RequestBody.class, request.getClass());
         processTimes(request);
         if (!delaySwitch) {
@@ -131,6 +143,12 @@ public class SimpleServerUserProcessor extends SyncUserProcessor<RequestBody> {
         return RequestBody.DEFAULT_SERVER_RETURN_STR;
     }
 
+    /**
+     * 指定感兴趣的请求数据类型，该 UserProcessor 只对感兴趣的请求类型的数据进行处理；
+     * 假设 除了需要处理 MyRequest 类型的数据，还要处理 java.lang.String 类型，有两种方式：
+     * 1、再提供一个 UserProcessor 实现类，其 interest() 返回 java.lang.String.class.getName()
+     * 2、使用 MultiInterestUserProcessor 实现类，可以为一个 UserProcessor 指定 List<String> multiInterest()
+     */
     @Override
     public String interest() {
         return RequestBody.class.getName();
@@ -152,8 +170,8 @@ public class SimpleServerUserProcessor extends SyncUserProcessor<RequestBody> {
     }
 
     public int getInvokeTimesEachCallType(RequestBody.InvokeType type) {
-        return new int[] { this.onewayTimes.get(), this.syncTimes.get(), this.futureTimes.get(),
-                this.callbackTimes.get() }[type.ordinal()];
+        return new int[]{this.onewayTimes.get(), this.syncTimes.get(), this.futureTimes.get(),
+                this.callbackTimes.get()}[type.ordinal()];
     }
 
     public String getRemoteAddr() throws InterruptedException {
@@ -176,6 +194,7 @@ public class SimpleServerUserProcessor extends SyncUserProcessor<RequestBody> {
     }
 
     // ~~~ getters and setters
+
     /**
      * Getter method for property <tt>timeoutDiscard</tt>.
      *

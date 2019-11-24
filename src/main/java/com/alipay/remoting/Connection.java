@@ -16,6 +16,16 @@
  */
 package com.alipay.remoting;
 
+import com.alipay.remoting.log.BoltLoggerFactory;
+import com.alipay.remoting.rpc.protocol.RpcProtocolV2;
+import com.alipay.remoting.util.ConcurrentHashSet;
+import com.alipay.remoting.util.RemotingUtil;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.util.AttributeKey;
+import org.slf4j.Logger;
+
 import java.net.InetSocketAddress;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -25,72 +35,62 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.slf4j.Logger;
-
-import com.alipay.remoting.log.BoltLoggerFactory;
-import com.alipay.remoting.rpc.protocol.RpcProtocolV2;
-import com.alipay.remoting.util.ConcurrentHashSet;
-import com.alipay.remoting.util.RemotingUtil;
-
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.util.AttributeKey;
-
 /**
  * An abstraction of socket channel.
  *
+ * 连接元数据
  * @author yunliang.shi
  * @version $Id: Connection.java, v 0.1 Mar 10, 2016 11:30:54 AM yunliang.shi Exp $
  */
 public class Connection {
 
-    private static final Logger                                                   logger           = BoltLoggerFactory
-                                                                                                       .getLogger("CommonDefault");
-
-    private Channel                                                               channel;
-
-    private final ConcurrentHashMap<Integer, InvokeFuture>                        invokeFutureMap  = new ConcurrentHashMap<Integer, InvokeFuture>(
-                                                                                                       4);
-
-    /** Attribute key for connection */
-    public static final AttributeKey<Connection>                                  CONNECTION       = AttributeKey
-                                                                                                       .valueOf("connection");
-    /** Attribute key for heartbeat count */
-    public static final AttributeKey<Integer>                                     HEARTBEAT_COUNT  = AttributeKey
-                                                                                                       .valueOf("heartbeatCount");
-
-    /** Attribute key for heartbeat switch for each connection */
-    public static final AttributeKey<Boolean>                                     HEARTBEAT_SWITCH = AttributeKey
-                                                                                                       .valueOf("heartbeatSwitch");
-
-    /** Attribute key for protocol */
-    public static final AttributeKey<ProtocolCode>                                PROTOCOL         = AttributeKey
-                                                                                                       .valueOf("protocol");
-    private ProtocolCode                                                          protocolCode;
-
-    /** Attribute key for version */
-    public static final AttributeKey<Byte>                                        VERSION          = AttributeKey
-                                                                                                       .valueOf("version");
-    private byte                                                                  version          = RpcProtocolV2.PROTOCOL_VERSION_1;
-
-    private Url                                                                   url;
-
-    private final ConcurrentHashMap<Integer/* id */, String/* poolKey */>       id2PoolKey       = new ConcurrentHashMap<Integer, String>(
-                                                                                                       256);
-
-    private Set<String>                                                           poolKeys         = new ConcurrentHashSet<String>();
-
-    private AtomicBoolean                                                         closed           = new AtomicBoolean(
-                                                                                                       false);
-
-    private final ConcurrentHashMap<String/* attr key*/, Object /*attr value*/> attributes       = new ConcurrentHashMap<String, Object>();
-
-    /** the reference count used for this connection. If equals 2, it means this connection has been referenced 2 times */
-    private final AtomicInteger                                                   referenceCount   = new AtomicInteger();
-
-    /** no reference of the current connection */
-    private static final int                                                      NO_REFERENCE     = 0;
+    /**
+     * Attribute key for connection
+     */
+    public static final AttributeKey<Connection> CONNECTION = AttributeKey
+            .valueOf("connection");
+    /**
+     * Attribute key for heartbeat count
+     */
+    public static final AttributeKey<Integer> HEARTBEAT_COUNT = AttributeKey
+            .valueOf("heartbeatCount");
+    /**
+     * Attribute key for heartbeat switch for each connection
+     */
+    public static final AttributeKey<Boolean> HEARTBEAT_SWITCH = AttributeKey
+            .valueOf("heartbeatSwitch");
+    /**
+     * Attribute key for protocol
+     */
+    public static final AttributeKey<ProtocolCode> PROTOCOL = AttributeKey
+            .valueOf("protocol");
+    /**
+     * Attribute key for version
+     */
+    public static final AttributeKey<Byte> VERSION = AttributeKey
+            .valueOf("version");
+    private static final Logger logger = BoltLoggerFactory
+            .getLogger("CommonDefault");
+    /**
+     * no reference of the current connection
+     */
+    private static final int NO_REFERENCE = 0;
+    private final ConcurrentHashMap<Integer, InvokeFuture> invokeFutureMap = new ConcurrentHashMap<Integer, InvokeFuture>(
+            4);
+    private final ConcurrentHashMap<Integer/* id */, String/* poolKey */> id2PoolKey = new ConcurrentHashMap<Integer, String>(
+            256);
+    private final ConcurrentHashMap<String/* attr key*/, Object /*attr value*/> attributes = new ConcurrentHashMap<String, Object>();
+    /**
+     * the reference count used for this connection. If equals 2, it means this connection has been referenced 2 times
+     */
+    private final AtomicInteger referenceCount = new AtomicInteger();
+    private Channel channel;
+    private ProtocolCode protocolCode;
+    private byte version = RpcProtocolV2.PROTOCOL_VERSION_1;
+    private Url url;
+    private Set<String> poolKeys = new ConcurrentHashSet<String>();
+    private AtomicBoolean closed = new AtomicBoolean(
+            false);
 
     /**
      * Constructor
@@ -99,6 +99,7 @@ public class Connection {
      */
     public Connection(Channel channel) {
         this.channel = channel;
+        System.out.println("将当前的 Connection 设置到对应的 netty channel 的附属属性中");
         this.channel.attr(CONNECTION).set(this);
     }
 
@@ -145,6 +146,7 @@ public class Connection {
      * Initialization.
      */
     private void init() {
+        System.out.println(" 添加一系列的附属属性：PROTOCOL 和 VERSION 会用在 Codec 编解码中；HEARTBEAT_COUNT 和 HEARTBEAT_SWITCH 会用在心跳");
         this.channel.attr(HEARTBEAT_COUNT).set(new Integer(0));
         this.channel.attr(PROTOCOL).set(this.protocolCode);
         this.channel.attr(VERSION).set(this.version);
@@ -263,6 +265,8 @@ public class Connection {
      * @return
      */
     public InvokeFuture addInvokeFuture(InvokeFuture future) {
+
+        // future.invokeId()就是消息的唯一id，后续的响应也会塞入这个id，最后根据响应中的该id来获取对应的InvokeFuture，做相应的操作
         return this.invokeFutureMap.putIfAbsent(future.invokeId(), future);
     }
 
@@ -280,6 +284,11 @@ public class Connection {
      * Do something when closing.
      */
     public void onClose() {
+        // 遍历 invokeFutureMap，对每一个 InvokeFuture
+        // 1. createConnectionClosedResponse 并设置到 InvokeFuture中，唤醒阻塞线程
+        // 2. 取消超时任务
+        // 3. 异步执行回调
+        System.out.println("=======onClose==============");
         Iterator<Entry<Integer, InvokeFuture>> iter = invokeFutureMap.entrySet().iterator();
         while (iter.hasNext()) {
             Entry<Integer, InvokeFuture> entry = iter.next();
@@ -306,10 +315,10 @@ public class Connection {
                         public void operationComplete(ChannelFuture future) throws Exception {
                             if (logger.isInfoEnabled()) {
                                 logger
-                                    .info(
-                                        "Close the connection to remote address={}, result={}, cause={}",
-                                        RemotingUtil.parseRemoteAddress(Connection.this
-                                            .getChannel()), future.isSuccess(), future.cause());
+                                        .info(
+                                                "Close the connection to remote address={}, result={}, cause={}",
+                                                RemotingUtil.parseRemoteAddress(Connection.this
+                                                        .getChannel()), future.isSuccess(), future.cause());
                             }
                         }
 
@@ -317,15 +326,14 @@ public class Connection {
                 }
             } catch (Exception e) {
                 logger.warn("Exception caught when closing connection {}",
-                    RemotingUtil.parseRemoteAddress(Connection.this.getChannel()), e);
+                        RemotingUtil.parseRemoteAddress(Connection.this.getChannel()), e);
             }
         }
     }
 
     /**
-    * Whether invokeFutures is completed
-    *
-    */
+     * Whether invokeFutures is completed
+     */
     public boolean isInvokeFutureMapFinish() {
         return invokeFutureMap.isEmpty();
     }

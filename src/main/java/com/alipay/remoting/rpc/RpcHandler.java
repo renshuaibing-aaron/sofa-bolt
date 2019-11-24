@@ -16,29 +16,23 @@
  */
 package com.alipay.remoting.rpc;
 
-import java.util.concurrent.ConcurrentHashMap;
-
-import com.alipay.remoting.Connection;
-import com.alipay.remoting.InvokeContext;
-import com.alipay.remoting.Protocol;
-import com.alipay.remoting.ProtocolCode;
-import com.alipay.remoting.ProtocolManager;
-import com.alipay.remoting.RemotingContext;
+import com.alipay.remoting.*;
 import com.alipay.remoting.rpc.protocol.UserProcessor;
-
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Dispatch messages to corresponding protocol.
- * 
+ *
  * @author jiangping
  * @version $Id: RpcHandler.java, v 0.1 2015-12-14 PM4:01:37 tao Exp $
  */
 @ChannelHandler.Sharable
 public class RpcHandler extends ChannelInboundHandlerAdapter {
-    private boolean                                     serverSide;
+    private boolean serverSide;
 
     private ConcurrentHashMap<String, UserProcessor<?>> userProcessors;
 
@@ -58,9 +52,18 @@ public class RpcHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+
+        System.out.println("====================RpcHandler#channelRead=============");
+        // 每一个请求都会在连接上添加 ProtocolCode 属性
         ProtocolCode protocolCode = ctx.channel().attr(Connection.PROTOCOL).get();
+
+        System.out.println("根据 channel 中的附加属性获取相应的 Protocol，之后使用该 Protocol 实例的 CommandHandler 处理消息");
         Protocol protocol = ProtocolManager.getProtocol(protocolCode);
-        protocol.getCommandHandler().handleCommand(
-            new RemotingContext(ctx, new InvokeContext(), serverSide, userProcessors), msg);
+
+        //创建上下文
+        RemotingContext remotingContext = new RemotingContext(ctx, new InvokeContext(), serverSide, userProcessors);
+
+
+        protocol.getCommandHandler().handleCommand(remotingContext, msg);
     }
 }

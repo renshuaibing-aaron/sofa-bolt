@@ -22,17 +22,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Listen and dispatch connection events.
+ *
  * @author jiangping
  * @version $Id: DefaultConnectionEventListener.java, v 0.1 Mar 5, 2016 10:56:20 AM tao Exp $
  */
 public class ConnectionEventListener {
 
     private ConcurrentHashMap<ConnectionEventType, List<ConnectionEventProcessor>> processors = new ConcurrentHashMap<ConnectionEventType, List<ConnectionEventProcessor>>(
-                                                                                                  3);
+            3);
 
     /**
      * Dispatch events.
-     * 
+     *
      * @param type
      * @param remoteAddr
      * @param conn
@@ -48,7 +49,7 @@ public class ConnectionEventListener {
 
     /**
      * Add event processor.
-     * 
+     *
      * @param type
      * @param processor
      */

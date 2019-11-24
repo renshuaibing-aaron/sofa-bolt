@@ -16,26 +16,17 @@
  */
 package com.alipay.remoting.rpc;
 
-import org.slf4j.Logger;
-
 import com.alipay.remoting.ResponseStatus;
-import com.alipay.remoting.exception.CodecException;
-import com.alipay.remoting.exception.ConnectionClosedException;
-import com.alipay.remoting.exception.DeserializationException;
-import com.alipay.remoting.exception.RemotingException;
-import com.alipay.remoting.exception.SerializationException;
+import com.alipay.remoting.exception.*;
 import com.alipay.remoting.log.BoltLoggerFactory;
-import com.alipay.remoting.rpc.exception.InvokeException;
-import com.alipay.remoting.rpc.exception.InvokeSendFailedException;
-import com.alipay.remoting.rpc.exception.InvokeServerBusyException;
-import com.alipay.remoting.rpc.exception.InvokeServerException;
-import com.alipay.remoting.rpc.exception.InvokeTimeoutException;
+import com.alipay.remoting.rpc.exception.*;
 import com.alipay.remoting.rpc.protocol.RpcResponseCommand;
 import com.alipay.remoting.util.StringUtils;
+import org.slf4j.Logger;
 
 /**
  * Resolve response object from response command.
- * 
+ *
  * @author jiangping
  * @version $Id: RpcResponseResolver.java, v 0.1 2015-10-8 PM2:47:29 tao Exp $
  */
@@ -46,17 +37,20 @@ public class RpcResponseResolver {
      * Analyze the response command and generate the response object.
      *
      * @param responseCommand response command
-     * @param addr response address
+     * @param addr            response address
      * @return response object
      */
     public static Object resolveResponseObject(ResponseCommand responseCommand, String addr)
-                                                                                            throws RemotingException {
+            throws RemotingException {
+       //处理错误的响应，如果有，直接封装为响应的 Exception，然后 throw
         preProcess(responseCommand, addr);
         if (responseCommand.getResponseStatus() == ResponseStatus.SUCCESS) {
+
+            //// 如果是成功状态
             return toResponseObject(responseCommand);
         } else {
             String msg = String.format("Rpc invocation exception: %s, the address is %s, id=%s",
-                responseCommand.getResponseStatus(), addr, responseCommand.getId());
+                    responseCommand.getResponseStatus(), addr, responseCommand.getId());
             logger.warn(msg);
             if (responseCommand.getCause() != null) {
                 throw new InvokeException(msg, responseCommand.getCause());
@@ -68,18 +62,19 @@ public class RpcResponseResolver {
     }
 
     private static void preProcess(ResponseCommand responseCommand, String addr)
-                                                                                throws RemotingException {
+            throws RemotingException {
+        System.out.println("处理错误的响应，如果有，直接封装为响应的 Exception，然后 throw");
         RemotingException e = null;
         String msg = null;
         if (responseCommand == null) {
             msg = String.format("Rpc invocation timeout[responseCommand null]! the address is %s",
-                addr);
+                    addr);
             e = new InvokeTimeoutException(msg);
         } else {
             switch (responseCommand.getResponseStatus()) {
                 case TIMEOUT:
                     msg = String.format(
-                        "Rpc invocation timeout[responseCommand TIMEOUT]! the address is %s", addr);
+                            "Rpc invocation timeout[responseCommand TIMEOUT]! the address is %s", addr);
                     e = new InvokeTimeoutException(msg);
                     break;
                 case CLIENT_SEND_ERROR:
@@ -92,36 +87,36 @@ public class RpcResponseResolver {
                     break;
                 case SERVER_THREADPOOL_BUSY:
                     msg = String.format("Server thread pool busy! the address is %s, id=%s", addr,
-                        responseCommand.getId());
+                            responseCommand.getId());
                     e = new InvokeServerBusyException(msg);
                     break;
                 case CODEC_EXCEPTION:
                     msg = String.format("Codec exception! the address is %s, id=%s", addr,
-                        responseCommand.getId());
+                            responseCommand.getId());
                     e = new CodecException(msg);
                     break;
                 case SERVER_SERIAL_EXCEPTION:
                     msg = String
-                        .format(
-                            "Server serialize response exception! the address is %s, id=%s, serverSide=true",
-                            addr, responseCommand.getId());
+                            .format(
+                                    "Server serialize response exception! the address is %s, id=%s, serverSide=true",
+                                    addr, responseCommand.getId());
                     e = new SerializationException(detailErrMsg(msg, responseCommand),
-                        toThrowable(responseCommand), true);
+                            toThrowable(responseCommand), true);
                     break;
                 case SERVER_DESERIAL_EXCEPTION:
                     msg = String
-                        .format(
-                            "Server deserialize request exception! the address is %s, id=%s, serverSide=true",
-                            addr, responseCommand.getId());
+                            .format(
+                                    "Server deserialize request exception! the address is %s, id=%s, serverSide=true",
+                                    addr, responseCommand.getId());
                     e = new DeserializationException(detailErrMsg(msg, responseCommand),
-                        toThrowable(responseCommand), true);
+                            toThrowable(responseCommand), true);
                     break;
                 case SERVER_EXCEPTION:
                     msg = String.format(
-                        "Server exception! Please check the server log, the address is %s, id=%s",
-                        addr, responseCommand.getId());
+                            "Server exception! Please check the server log, the address is %s, id=%s",
+                            addr, responseCommand.getId());
                     e = new InvokeServerException(detailErrMsg(msg, responseCommand),
-                        toThrowable(responseCommand));
+                            toThrowable(responseCommand));
                     break;
                 default:
                     break;
@@ -140,7 +135,11 @@ public class RpcResponseResolver {
      */
     private static Object toResponseObject(ResponseCommand responseCommand) throws CodecException {
         RpcResponseCommand response = (RpcResponseCommand) responseCommand;
+        //反序列化
+        System.out.println("========反序列化================");
         response.deserialize();
+
+        //抽取响应的结果
         return response.getResponseObject();
     }
 

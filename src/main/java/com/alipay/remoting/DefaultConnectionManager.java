@@ -16,25 +16,6 @@
  */
 package com.alipay.remoting;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.alipay.remoting.config.ConfigManager;
 import com.alipay.remoting.config.switches.GlobalSwitch;
 import com.alipay.remoting.connection.ConnectionFactory;
@@ -42,6 +23,11 @@ import com.alipay.remoting.exception.RemotingException;
 import com.alipay.remoting.util.FutureTaskUtil;
 import com.alipay.remoting.util.RunStateRecordedFutureTask;
 import com.alipay.remoting.util.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.util.concurrent.*;
 
 /**
  * Abstract implementation of connection manager
@@ -50,101 +36,87 @@ import com.alipay.remoting.util.StringUtils;
  * @version $Id: DefaultConnectionManager.java, v 0.1 Mar 8, 2016 10:43:51 AM xiaomin.cxm Exp $
  */
 public class DefaultConnectionManager implements ConnectionManager, ConnectionHeartbeatManager,
-                                     Scannable {
+        Scannable {
 
     // ~~~ constants
     /**
      * logger
      */
-    private static final Logger                                                     logger              = LoggerFactory
-                                                                                                            .getLogger("CommonDefault");
+    private static final Logger logger = LoggerFactory
+            .getLogger("CommonDefault");
 
     /**
      * default expire time to remove connection pool, time unit: milliseconds
      */
-    private static final int                                                        DEFAULT_EXPIRE_TIME = 10 * 60 * 1000;
+    private static final int DEFAULT_EXPIRE_TIME = 10 * 60 * 1000;
 
     /**
      * default retry times when falied to get result of FutureTask
      */
-    private static final int                                                        DEFAULT_RETRY_TIMES = 2;
+    private static final int DEFAULT_RETRY_TIMES = 2;
 
     // ~~~ members
-
-    /**
-     * min pool size for asyncCreateConnectionExecutor
-     */
-    private int                                                                     minPoolSize         = ConfigManager
-                                                                                                            .conn_create_tp_min_size();
-
-    /**
-     * max pool size for asyncCreateConnectionExecutor
-     */
-    private int                                                                     maxPoolSize         = ConfigManager
-                                                                                                            .conn_create_tp_max_size();
-
-    /**
-     * queue size for asyncCreateConnectionExecutor
-     */
-    private int                                                                     queueSize           = ConfigManager
-                                                                                                            .conn_create_tp_queue_size();
-
-    /**
-     * keep alive time for asyncCreateConnectionExecutor
-     */
-    private long                                                                    keepAliveTime       = ConfigManager
-                                                                                                            .conn_create_tp_keepalive();
-
-    /**
-     * executor initialie status
-     */
-    private volatile boolean                                                        executorInitialized;
-
-    /**
-     * executor to create connections in async way
-     * note: this is lazy initialized
-     */
-    private Executor                                                                asyncCreateConnectionExecutor;
-
-    /**
-     * switch status
-     */
-    private GlobalSwitch                                                            globalSwitch;
-
     /**
      * connection pool initialize tasks
      */
     protected ConcurrentHashMap<String, RunStateRecordedFutureTask<ConnectionPool>> connTasks;
-
     /**
      * heal connection tasks
      */
-    protected ConcurrentHashMap<String, FutureTask<Integer>>                        healTasks;
-
+    protected ConcurrentHashMap<String, FutureTask<Integer>> healTasks;
     /**
      * connection pool select strategy
      */
-    protected ConnectionSelectStrategy                                              connectionSelectStrategy;
-
+    protected ConnectionSelectStrategy connectionSelectStrategy;
     /**
      * address parser
      */
-    protected RemotingAddressParser                                                 addressParser;
-
+    protected RemotingAddressParser addressParser;
     /**
      * connection factory
      */
-    protected ConnectionFactory                                                     connectionFactory;
-
+    protected ConnectionFactory connectionFactory;
     /**
      * connection event handler
      */
-    protected ConnectionEventHandler                                                connectionEventHandler;
-
+    protected ConnectionEventHandler connectionEventHandler;
     /**
      * connection event listener
      */
-    protected ConnectionEventListener                                               connectionEventListener;
+    protected ConnectionEventListener connectionEventListener;
+    /**
+     * min pool size for asyncCreateConnectionExecutor
+     */
+    private int minPoolSize = ConfigManager
+            .conn_create_tp_min_size();
+    /**
+     * max pool size for asyncCreateConnectionExecutor
+     */
+    private int maxPoolSize = ConfigManager
+            .conn_create_tp_max_size();
+    /**
+     * queue size for asyncCreateConnectionExecutor
+     */
+    private int queueSize = ConfigManager
+            .conn_create_tp_queue_size();
+    /**
+     * keep alive time for asyncCreateConnectionExecutor
+     */
+    private long keepAliveTime = ConfigManager
+            .conn_create_tp_keepalive();
+    /**
+     * executor initialie status
+     */
+    private volatile boolean executorInitialized;
+    /**
+     * executor to create connections in async way
+     * note: this is lazy initialized
+     */
+    private Executor asyncCreateConnectionExecutor;
+    /**
+     * switch status
+     */
+    private GlobalSwitch globalSwitch;
 
     // ~~~ constructors
 
@@ -216,7 +188,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                                     ConnectionEventListener connectionEventListener,
                                     GlobalSwitch globalSwitch) {
         this(connectionSelectStrategy, connctionFactory, connectionEventHandler,
-            connectionEventListener);
+                connectionEventListener);
         this.globalSwitch = globalSwitch;
     }
 
@@ -255,8 +227,8 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
         } catch (Exception e) {
             // should not reach here.
             logger.error(
-                "[NOTIFYME] Exception occurred when getOrCreateIfAbsent an empty ConnectionPool!",
-                e);
+                    "[NOTIFYME] Exception occurred when getOrCreateIfAbsent an empty ConnectionPool!",
+                    e);
         }
         if (pool != null) {
             pool.add(connection);
@@ -293,7 +265,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
     public Map<String, List<Connection>> getAll() {
         Map<String, List<Connection>> allConnections = new HashMap<String, List<Connection>>();
         Iterator<Map.Entry<String, RunStateRecordedFutureTask<ConnectionPool>>> iterator = this
-            .getConnPools().entrySet().iterator();
+                .getConnPools().entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, RunStateRecordedFutureTask<ConnectionPool>> entry = iterator.next();
             ConnectionPool pool = FutureTaskUtil.getFutureTaskResult(entry.getValue(), logger);
@@ -340,13 +312,13 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
             if (pool.isEmpty()) {
                 this.removeTask(poolKey);
                 logger.warn(
-                    "Remove and close the last connection in ConnectionPool with poolKey {}",
-                    poolKey);
+                        "Remove and close the last connection in ConnectionPool with poolKey {}",
+                        poolKey);
             } else {
                 logger
-                    .warn(
-                        "Remove and close a connection in ConnectionPool with poolKey {}, {} connections left.",
-                        poolKey, pool.size());
+                        .warn(
+                                "Remove and close a connection in ConnectionPool with poolKey {}, {} connections left.",
+                                poolKey, pool.size());
             }
         }
     }
@@ -366,7 +338,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
             if (null != pool) {
                 pool.removeAllAndTryClose();
                 logger.warn("Remove and close all connections in ConnectionPool of poolKey={}",
-                    poolKey);
+                        poolKey);
             }
         }
     }
@@ -403,12 +375,12 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
         if (connection.getChannel() == null || !connection.getChannel().isActive()) {
             this.remove(connection);
             throw new RemotingException("Check connection failed for address: "
-                                        + connection.getUrl());
+                    + connection.getUrl());
         }
         if (!connection.getChannel().isWritable()) {
             // No remove. Most of the time it is unwritable temporarily.
             throw new RemotingException("Check connection failed for address: "
-                                        + connection.getUrl() + ", maybe write overflow!");
+                    + connection.getUrl() + ", maybe write overflow!");
         }
     }
 
@@ -446,7 +418,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                         if ((System.currentTimeMillis() - pool.getLastAccessTimestamp()) > DEFAULT_EXPIRE_TIME) {
                             iter.remove();
                             logger.warn("Remove expired pool task of poolKey {} which is empty.",
-                                poolKey);
+                                    poolKey);
                         }
                     }
                 }
@@ -462,9 +434,15 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
     @Override
     public Connection getAndCreateIfAbsent(Url url) throws InterruptedException, RemotingException {
         // get and create a connection pool with initialized connections.
-        ConnectionPool pool = this.getConnectionPoolAndCreateIfAbsent(url.getUniqueKey(),
-            new ConnectionPoolCall(url));
+        //System.out.println("创建一个 Callable<ConnectionPool> task");
+
+        //参数：poolkey: 127.0.0.1:8999 callable: 上述的 ConnectionPoolCall 实例
+
+        ConnectionPool pool = this.getConnectionPoolAndCreateIfAbsent(url.getUniqueKey(), new ConnectionPoolCall(url));
+
+
         if (null != pool) {
+            //从 ConnectionPool 中使用 ConnectionSelectStrategy 获取一个 Connection
             return pool.get();
         } else {
             logger.error("[NOTIFYME] bug detected! pool here must not be null!");
@@ -483,10 +461,14 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
      */
     @Override
     public void createConnectionAndHealIfNeed(Url url) throws InterruptedException,
-                                                      RemotingException {
+            RemotingException {
+
+        // 这里使用了建连操作方法，
+        // 如果 ConnectionPool 不存在，则创建 ConnectionPool，然后创建指定数量的 Connection；
+        // 如果 ConnectionPool 已经存在，那么这里会直接获取 ConnectionPool 并返回，此时就有可能需要重连操作
         // get and create a connection pool with initialized connections.
         ConnectionPool pool = this.getConnectionPoolAndCreateIfAbsent(url.getUniqueKey(),
-            new ConnectionPoolCall(url));
+                new ConnectionPoolCall(url));
         if (null != pool) {
             healIfNeed(pool, url);
         } else {
@@ -504,7 +486,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
             conn = this.connectionFactory.createConnection(url);
         } catch (Exception e) {
             throw new RemotingException("Create connection failed. The address is "
-                                        + url.getOriginUrl(), e);
+                    + url.getOriginUrl(), e);
         }
         return conn;
     }
@@ -519,7 +501,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
             conn = this.connectionFactory.createConnection(ip, port, connectTimeout);
         } catch (Exception e) {
             throw new RemotingException("Create connection failed. The address is " + ip + ":"
-                                        + port, e);
+                    + port, e);
         }
         return conn;
     }
@@ -574,14 +556,13 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
      * @param poolKey  mapping key of {@link ConnectionPool}
      * @param callable the callable task
      * @return a non-nullable instance of {@link ConnectionPool}
-     * @throws RemotingException if there is no way to get an available {@link ConnectionPool}
+     * @throws RemotingException    if there is no way to get an available {@link ConnectionPool}
      * @throws InterruptedException
      */
-    private ConnectionPool getConnectionPoolAndCreateIfAbsent(String poolKey,
-                                                              Callable<ConnectionPool> callable)
-                                                                                                throws RemotingException,
-                                                                                                InterruptedException {
-        RunStateRecordedFutureTask<ConnectionPool> initialTask = null;
+    private ConnectionPool getConnectionPoolAndCreateIfAbsent(String poolKey, Callable<ConnectionPool> callable)
+            throws RemotingException,InterruptedException {
+
+        RunStateRecordedFutureTask<ConnectionPool> initialTask;
         ConnectionPool pool = null;
 
         int retry = DEFAULT_RETRY_TIMES;
@@ -590,12 +571,20 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
         int timesOfInterrupt = 0;
 
         for (int i = 0; (i < retry) && (pool == null); ++i) {
+
             initialTask = this.connTasks.get(poolKey);
+
+
             if (null == initialTask) {
+
+                // 包装 callable
                 initialTask = new RunStateRecordedFutureTask<ConnectionPool>(callable);
+
+                //下一次就直接从该缓存取出任务 initialTask（之后直接从 task 中取出 ConnectionPool），不再 new
                 initialTask = this.connTasks.putIfAbsent(poolKey, initialTask);
                 if (null == initialTask) {
                     initialTask = this.connTasks.get(poolKey);
+                    //ConnectionPoolCall.call()方法
                     initialTask.run();
                 }
             }
@@ -609,7 +598,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                     }
                     this.connTasks.remove(poolKey);
                     String errMsg = "Get future task result null for poolKey [" + poolKey
-                                    + "] after [" + (timesOfResultNull + 1) + "] times try.";
+                            + "] after [" + (timesOfResultNull + 1) + "] times try.";
                     throw new RemotingException(errMsg);
                 }
             } catch (InterruptedException e) {
@@ -618,10 +607,8 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                     continue;// retry if interrupted
                 }
                 this.connTasks.remove(poolKey);
-                logger
-                    .warn(
-                        "Future task of poolKey {} interrupted {} times. InterruptedException thrown and stop retry.",
-                        poolKey, (timesOfInterrupt + 1), e);
+                logger.warn("Future task of poolKey {} interrupted {} times. InterruptedException thrown and stop retry.",
+                                poolKey, (timesOfInterrupt + 1), e);
                 throw e;
             } catch (ExecutionException e) {
                 // DO NOT retry if ExecutionException occurred
@@ -660,7 +647,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
      * @param url
      */
     private void healIfNeed(ConnectionPool pool, Url url) throws RemotingException,
-                                                         InterruptedException {
+            InterruptedException {
         String poolKey = url.getUniqueKey();
         // only when async creating connections done
         // and the actual size of connections less than expected, the healing task can be run.
@@ -678,7 +665,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                 int numAfterHeal = task.get();
                 if (logger.isDebugEnabled()) {
                     logger.debug("[NOTIFYME] - conn num after heal {}, expected {}, warmup {}",
-                        numAfterHeal, url.getConnNum(), url.isConnWarmup());
+                            numAfterHeal, url.getConnNum(), url.isConnWarmup());
                 }
             } catch (InterruptedException e) {
                 this.healTasks.remove(poolKey);
@@ -698,76 +685,6 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
     }
 
     /**
-     * a callable definition for initialize {@link ConnectionPool}
-     *
-     * @author tsui
-     * @version $Id: ConnectionPoolCall.java, v 0.1 Mar 8, 2016 10:43:51 AM xiaomin.cxm Exp $
-     */
-    private class ConnectionPoolCall implements Callable<ConnectionPool> {
-        private boolean whetherInitConnection;
-        private Url     url;
-
-        /**
-         * create a {@link ConnectionPool} but not init connections
-         */
-        public ConnectionPoolCall() {
-            this.whetherInitConnection = false;
-        }
-
-        /**
-         * create a {@link ConnectionPool} and init connections with the specified {@link Url}
-         *
-         * @param url
-         */
-        public ConnectionPoolCall(Url url) {
-            this.whetherInitConnection = true;
-            this.url = url;
-        }
-
-        @Override
-        public ConnectionPool call() throws Exception {
-            final ConnectionPool pool = new ConnectionPool(connectionSelectStrategy);
-            if (whetherInitConnection) {
-                try {
-                    doCreate(this.url, pool, this.getClass().getSimpleName(), 1);
-                } catch (Exception e) {
-                    pool.removeAllAndTryClose();
-                    throw e;
-                }
-            }
-            return pool;
-        }
-
-    }
-
-    /**
-     * a callable definition for healing connections in {@link ConnectionPool}
-     *
-     * @author tsui
-     * @version $Id: HealConnectionCall.java, v 0.1 Jul 20, 2017 10:23:23 AM xiaomin.cxm Exp $
-     */
-    private class HealConnectionCall implements Callable<Integer> {
-        private Url            url;
-        private ConnectionPool pool;
-
-        /**
-         * create a {@link ConnectionPool} and init connections with the specified {@link Url}
-         *
-         * @param url
-         */
-        public HealConnectionCall(Url url, ConnectionPool pool) {
-            this.url = url;
-            this.pool = pool;
-        }
-
-        @Override
-        public Integer call() throws Exception {
-            doCreate(this.url, this.pool, this.getClass().getSimpleName(), 0);
-            return this.pool.size();
-        }
-    }
-
-    /**
      * do create connections
      *
      * @param url
@@ -778,26 +695,30 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
      */
     private void doCreate(final Url url, final ConnectionPool pool, final String taskName,
                           final int syncCreateNumWhenNotWarmup) throws RemotingException {
+        //创建 poolKey 的 Connection 并添加到 ConnectionPool 中
         final int actualNum = pool.size();
         final int expectNum = url.getConnNum();
         if (actualNum < expectNum) {
             if (logger.isDebugEnabled()) {
                 logger.debug("actual num {}, expect num {}, task name {}", actualNum, expectNum,
-                    taskName);
+                        taskName);
             }
             if (url.isConnWarmup()) {
                 for (int i = actualNum; i < expectNum; ++i) {
+                    //创建connection
                     Connection connection = create(url);
                     pool.add(connection);
                 }
             } else {
                 if (syncCreateNumWhenNotWarmup < 0 || syncCreateNumWhenNotWarmup > url.getConnNum()) {
                     throw new IllegalArgumentException(
-                        "sync create number when not warmup should be [0," + url.getConnNum() + "]");
+                            "sync create number when not warmup should be [0," + url.getConnNum() + "]");
                 }
                 // create connection in sync way
                 if (syncCreateNumWhenNotWarmup > 0) {
                     for (int i = 0; i < syncCreateNumWhenNotWarmup; ++i) {
+
+                        //创建连接
                         Connection connection = create(url);
                         pool.add(connection);
                     }
@@ -819,9 +740,9 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                                         conn = create(url);
                                     } catch (RemotingException e) {
                                         logger
-                                            .error(
-                                                "Exception occurred in async create connection thread for {}, taskName {}",
-                                                url.getUniqueKey(), taskName, e);
+                                                .error(
+                                                        "Exception occurred in async create connection thread for {}, taskName {}",
+                                                        url.getUniqueKey(), taskName, e);
                                     }
                                     pool.add(conn);
                                 }
@@ -845,12 +766,10 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
         if (!this.executorInitialized) {
             this.executorInitialized = true;
             this.asyncCreateConnectionExecutor = new ThreadPoolExecutor(minPoolSize, maxPoolSize,
-                keepAliveTime, TimeUnit.SECONDS, new ArrayBlockingQueue<Runnable>(queueSize),
-                new NamedThreadFactory("Bolt-conn-warmup-executor", true));
+                    keepAliveTime, TimeUnit.SECONDS, new ArrayBlockingQueue<Runnable>(queueSize),
+                    new NamedThreadFactory("Bolt-conn-warmup-executor", true));
         }
     }
-
-    // ~~~ getters and setters
 
     /**
      * Getter method for property <tt>connectionSelectStrategy</tt>.
@@ -869,6 +788,8 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
     public void setConnectionSelectStrategy(ConnectionSelectStrategy connectionSelectStrategy) {
         this.connectionSelectStrategy = connectionSelectStrategy;
     }
+
+    // ~~~ getters and setters
 
     /**
      * Getter method for property <tt>addressParser</tt>.
@@ -949,5 +870,78 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
      */
     public ConcurrentHashMap<String, RunStateRecordedFutureTask<ConnectionPool>> getConnPools() {
         return this.connTasks;
+    }
+
+    /**
+     * a callable definition for initialize {@link ConnectionPool}
+     *
+     * @author tsui
+     * @version $Id: ConnectionPoolCall.java, v 0.1 Mar 8, 2016 10:43:51 AM xiaomin.cxm Exp $
+     */
+    private class ConnectionPoolCall implements Callable<ConnectionPool> {
+        private boolean whetherInitConnection;
+        private Url url;
+
+        /**
+         * create a {@link ConnectionPool} but not init connections
+         */
+        public ConnectionPoolCall() {
+            this.whetherInitConnection = false;
+        }
+
+        /**
+         * create a {@link ConnectionPool} and init connections with the specified {@link Url}
+         *
+         * @param url
+         */
+        public ConnectionPoolCall(Url url) {
+            this.whetherInitConnection = true;
+            this.url = url;
+        }
+
+        @Override
+        public ConnectionPool call() throws Exception {
+            //获取或者创建 poolKey 的 ConnectionPool
+            final ConnectionPool pool = new ConnectionPool(connectionSelectStrategy);
+
+            if (whetherInitConnection) {
+                try {
+                    //创建 poolKey 的 Connection 并添加到 ConnectionPool 中
+                    doCreate(this.url, pool, this.getClass().getSimpleName(), 1);
+                } catch (Exception e) {
+                    pool.removeAllAndTryClose();
+                    throw e;
+                }
+            }
+            return pool;
+        }
+
+    }
+
+    /**
+     * a callable definition for healing connections in {@link ConnectionPool}
+     *
+     * @author tsui
+     * @version $Id: HealConnectionCall.java, v 0.1 Jul 20, 2017 10:23:23 AM xiaomin.cxm Exp $
+     */
+    private class HealConnectionCall implements Callable<Integer> {
+        private Url url;
+        private ConnectionPool pool;
+
+        /**
+         * create a {@link ConnectionPool} and init connections with the specified {@link Url}
+         *
+         * @param url
+         */
+        public HealConnectionCall(Url url, ConnectionPool pool) {
+            this.url = url;
+            this.pool = pool;
+        }
+
+        @Override
+        public Integer call() throws Exception {
+            doCreate(this.url, this.pool, this.getClass().getSimpleName(), 0);
+            return this.pool.size();
+        }
     }
 }

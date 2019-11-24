@@ -16,9 +16,9 @@
  */
 package com.alipay.remoting;
 
-import java.util.concurrent.ExecutorService;
-
 import com.alipay.remoting.rpc.protocol.UserProcessor;
+
+import java.util.concurrent.ExecutorService;
 
 /**
  * @author chengyi (mark.lx@antfin.com) 2018-06-16 06:55
@@ -38,7 +38,7 @@ public interface RemotingServer {
 
     /**
      * Stop the server.
-     *
+     * <p>
      * Remoting server can not be used any more after stop.
      * If you need, you should destroy it, and instantiate another one.
      */
@@ -62,8 +62,8 @@ public interface RemotingServer {
      * Register processor for command with the command code.
      *
      * @param protocolCode protocol code
-     * @param commandCode command code
-     * @param processor processor
+     * @param commandCode  command code
+     * @param processor    processor
      */
     void registerProcessor(byte protocolCode, CommandCode commandCode,
                            RemotingProcessor<?> processor);
@@ -72,7 +72,7 @@ public interface RemotingServer {
      * Register default executor service for server.
      *
      * @param protocolCode protocol code
-     * @param executor the executor service for the protocol code
+     * @param executor     the executor service for the protocol code
      */
     void registerDefaultExecutor(byte protocolCode, ExecutorService executor);
 

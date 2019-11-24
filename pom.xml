@@ -87,6 +87,7 @@
     </properties>
 
     <dependencies>
+
         <!-- default scope -->
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -103,13 +104,12 @@
             <artifactId>sofa-common-tools</artifactId>
             <version>${sofa.common.tools}</version>
         </dependency>
-
         <!-- provided scope -->
         <dependency>
             <groupId>com.alipay.sofa</groupId>
             <artifactId>hessian</artifactId>
             <version>${hessian.version}</version>
-            <scope>provided</scope>
+           <!-- <scope>provided</scope>-->
         </dependency>
 
         <!-- test scope -->

@@ -16,54 +16,58 @@
  */
 package com.alipay.remoting;
 
+import com.alipay.remoting.exception.RemotingException;
+import com.alipay.remoting.log.BoltLoggerFactory;
+import org.slf4j.Logger;
+
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import org.slf4j.Logger;
-
-import com.alipay.remoting.exception.RemotingException;
-import com.alipay.remoting.log.BoltLoggerFactory;
-
 /**
  * Reconnect manager.
- * 
+ *
  * @author yunliang.shi
  * @version $Id: ReconnectManager.java, v 0.1 Mar 11, 2016 5:20:50 PM yunliang.shi Exp $
  */
 public class ReconnectManager {
     private static final Logger logger = BoltLoggerFactory.getLogger("CommonDefault");
 
-    class ReconnectTask {
-        Url url;
-    }
+    // 取消重连的队列
+    protected final List<Url/* url */> canceled = new CopyOnWriteArrayList<Url>();
 
-    private final LinkedBlockingQueue<ReconnectTask> tasks                  = new LinkedBlockingQueue<ReconnectTask>();
+    // 待重连队列
+    private final LinkedBlockingQueue<ReconnectTask> tasks = new LinkedBlockingQueue<ReconnectTask>();
 
-    protected final List<Url/* url */>              canceled               = new CopyOnWriteArrayList<Url>();
-    private volatile boolean                         started;
 
-    private int                                      healConnectionInterval = 1000;
+    private final Thread healConnectionThreads;
+    private volatile boolean started;
 
-    private final Thread                             healConnectionThreads;
-
-    private ConnectionManager                        connectionManager;
+    private int healConnectionInterval = 1000;
+    private ConnectionManager connectionManager;
 
     public ReconnectManager(ConnectionManager connectionManager) {
         this.connectionManager = connectionManager;
+
+        // 创建重连任务
         this.healConnectionThreads = new Thread(new HealConnectionRunner());
+
+        // 启动重连线程
         this.healConnectionThreads.start();
         this.started = true;
     }
 
+    // 执行重连操作
     private void doReconnectTask(ReconnectTask task) throws InterruptedException, RemotingException {
         connectionManager.createConnectionAndHealIfNeed(task.url);
     }
 
+    // 将重连任务添加到待重连队列中
     private void addReconnectTask(ReconnectTask task) {
         tasks.add(task);
     }
 
+    // 将不需要重连的任务添加到取消重连队列中
     public void addCancelUrl(Url url) {
         canceled.add(url);
     }
@@ -74,7 +78,7 @@ public class ReconnectManager {
 
     /**
      * add reconnect task
-     * 
+     * // 将重连任务添加到待重连队列中
      * @param url
      */
     public void addReconnectTask(Url url) {
@@ -85,7 +89,7 @@ public class ReconnectManager {
 
     /**
      * Check task whether is valid, if canceled, is not valid
-     * 
+     * 检测 task 是否需要重连
      * @param task
      * @return
      */
@@ -94,21 +98,32 @@ public class ReconnectManager {
     }
 
     /**
+     *  // 停止重连线程
      * stop reconnect thread
      */
     public void stop() {
+
+        // 如果重连线程没启动过，直接返回
         if (!this.started) {
             return;
         }
         this.started = false;
+
+        // 中断重连线程
         healConnectionThreads.interrupt();
+
+        // 清空待重连队列和取消重连队列
         this.tasks.clear();
         this.canceled.clear();
     }
 
+    class ReconnectTask {
+        Url url;
+    }
+
     /**
      * heal connection thread
-     * 
+     * // 重连任务
      * @author yunliang.shi
      * @version $Id: ReconnectManager.java, v 0.1 Mar 11, 2016 5:24:08 PM yunliang.shi Exp $
      */
@@ -121,12 +136,16 @@ public class ReconnectManager {
                 long start = -1;
                 ReconnectTask task = null;
                 try {
+
+                    // 如果重连线程执行的连接操作的时间小于 healConnectionInterval，当前线程睡 healConnectionInterval（防止待重连队列为空，线程空转，CPU消耗严重）
+                    // 如果重连线程执行的连接操作的时间 >= healConnectionInterval，可继续执行
                     if (this.lastConnectTime > 0
-                        && this.lastConnectTime < ReconnectManager.this.healConnectionInterval
-                        || this.lastConnectTime < 0) {
+                            && this.lastConnectTime < ReconnectManager.this.healConnectionInterval
+                            || this.lastConnectTime < 0) {
                         Thread.sleep(ReconnectManager.this.healConnectionInterval);
                     }
                     try {
+                        // 从待重连队列获取待重连任务
                         task = ReconnectManager.this.tasks.take();
                     } catch (InterruptedException e) {
                         // ignore
@@ -135,16 +154,19 @@ public class ReconnectManager {
                     start = System.currentTimeMillis();
                     if (ReconnectManager.this.isValidTask(task)) {
                         try {
+                            // 如果待重连任务没有被取消，则执行重连任务
                             ReconnectManager.this.doReconnectTask(task);
                         } catch (InterruptedException e) {
                             throw e;
                         }
                     } else {
                         logger.warn("Invalid reconnect request task {}, cancel list size {}",
-                            task.url, canceled.size());
+                                task.url, canceled.size());
                     }
                     this.lastConnectTime = System.currentTimeMillis() - start;
                 } catch (Exception e) {
+
+                    // 如果失败，将失败任务重新加入待重连队列，之后重试重连操作
                     retryWhenException(start, task, e);
                 }
             }
@@ -156,6 +178,7 @@ public class ReconnectManager {
             }
             if (task != null) {
                 logger.warn("reconnect target: {} failed.", task.url, e);
+                // 将失败任务重新加入待重连队列
                 ReconnectManager.this.addReconnectTask(task);
             }
         }

@@ -16,16 +16,15 @@
  */
 package com.alipay.remoting.rpc;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.*;
 
 public class RpcConfigManagerTest {
     @BeforeClass
     public static void initClass() {
+    }
+
+    @AfterClass
+    public static void afterClass() {
     }
 
     @Before
@@ -34,10 +33,6 @@ public class RpcConfigManagerTest {
 
     @After
     public void stop() {
-    }
-
-    @AfterClass
-    public static void afterClass() {
     }
 
     @Test

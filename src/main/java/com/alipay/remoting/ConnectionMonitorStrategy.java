@@ -16,10 +16,10 @@
  */
 package com.alipay.remoting;
 
+import com.alipay.remoting.util.RunStateRecordedFutureTask;
+
 import java.util.List;
 import java.util.Map;
-
-import com.alipay.remoting.util.RunStateRecordedFutureTask;
 
 /**
  * The strategy of connection monitor

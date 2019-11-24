@@ -16,10 +16,6 @@
  */
 package com.alipay.remoting.rpc;
 
-import java.util.concurrent.RejectedExecutionException;
-
-import org.slf4j.Logger;
-
 import com.alipay.remoting.InvokeCallback;
 import com.alipay.remoting.InvokeCallbackListener;
 import com.alipay.remoting.InvokeFuture;
@@ -32,10 +28,13 @@ import com.alipay.remoting.rpc.exception.InvokeServerBusyException;
 import com.alipay.remoting.rpc.exception.InvokeServerException;
 import com.alipay.remoting.rpc.exception.InvokeTimeoutException;
 import com.alipay.remoting.rpc.protocol.RpcResponseCommand;
+import org.slf4j.Logger;
+
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Listener which listens the Rpc invoke result, and then invokes the call back.
- * 
+ *
  * @author jiangping
  * @version $Id: RpcInvokeCallbackListener.java, v 0.1 2015-9-30 AM10:36:34 tao Exp $
  */
@@ -43,7 +42,7 @@ public class RpcInvokeCallbackListener implements InvokeCallbackListener {
 
     private static final Logger logger = BoltLoggerFactory.getLogger("RpcRemoting");
 
-    private String              address;
+    private String address;
 
     public RpcInvokeCallbackListener() {
 
@@ -53,14 +52,21 @@ public class RpcInvokeCallbackListener implements InvokeCallbackListener {
         this.address = address;
     }
 
-    /** 
+    /**
      * @see com.alipay.remoting.InvokeCallbackListener#onResponse(com.alipay.remoting.InvokeFuture)
      */
     @Override
     public void onResponse(InvokeFuture future) {
+        //// 从InvokeFuture中获取InvokeCallback
         InvokeCallback callback = future.getInvokeCallback();
+
         if (callback != null) {
+
+           // 创建 CallbackTask 任务对象，并将 InvokeCallback 设置到该对象中；
+            // 最后执行该任务（如果InvokeCallback对象设置了线程池，则使用该线程池执行，否则，直接使用当前线程执行
             CallbackTask task = new CallbackTask(this.getRemoteAddress(), future);
+
+
             if (callback.getExecutor() != null) {
                 // There is no need to switch classloader, because executor is provided by user.
                 try {
@@ -74,33 +80,45 @@ public class RpcInvokeCallbackListener implements InvokeCallbackListener {
         }
     }
 
+    /**
+     * @see com.alipay.remoting.InvokeCallbackListener#getRemoteAddress()
+     */
+    @Override
+    public String getRemoteAddress() {
+        return this.address;
+    }
+
     class CallbackTask implements Runnable {
 
         InvokeFuture future;
-        String       remoteAddress;
+        String remoteAddress;
 
         /**
-         * 
+         *
          */
         public CallbackTask(String remoteAddress, InvokeFuture future) {
             this.remoteAddress = remoteAddress;
             this.future = future;
         }
 
-        /** 
+        /**
          * @see java.lang.Runnable#run()
          */
         @Override
         public void run() {
+           // 获取InvokeCallback +
             InvokeCallback callback = future.getInvokeCallback();
             // a lot of try-catches to protect thread pool
             ResponseCommand response = null;
 
             try {
+                //获取响应消息
                 response = (ResponseCommand) future.waitResponse(0);
+
+
             } catch (InterruptedException e) {
                 String msg = "Exception caught when getting response from InvokeFuture. The address is "
-                             + this.remoteAddress;
+                        + this.remoteAddress;
                 logger.error(msg, e);
             }
             if (response == null || response.getResponseStatus() != ResponseStatus.SUCCESS) {
@@ -108,29 +126,29 @@ public class RpcInvokeCallbackListener implements InvokeCallbackListener {
                     Exception e;
                     if (response == null) {
                         e = new InvokeException("Exception caught in invocation. The address is "
-                                                + this.remoteAddress + " responseStatus:"
-                                                + ResponseStatus.UNKNOWN, future.getCause());
+                                + this.remoteAddress + " responseStatus:"
+                                + ResponseStatus.UNKNOWN, future.getCause());
                     } else {
                         response.setInvokeContext(future.getInvokeContext());
                         switch (response.getResponseStatus()) {
                             case TIMEOUT:
                                 e = new InvokeTimeoutException(
-                                    "Invoke timeout when invoke with callback.The address is "
-                                            + this.remoteAddress);
+                                        "Invoke timeout when invoke with callback.The address is "
+                                                + this.remoteAddress);
                                 break;
                             case CONNECTION_CLOSED:
                                 e = new ConnectionClosedException(
-                                    "Connection closed when invoke with callback.The address is "
-                                            + this.remoteAddress);
+                                        "Connection closed when invoke with callback.The address is "
+                                                + this.remoteAddress);
                                 break;
                             case SERVER_THREADPOOL_BUSY:
                                 e = new InvokeServerBusyException(
-                                    "Server thread pool busy when invoke with callback.The address is "
-                                            + this.remoteAddress);
+                                        "Server thread pool busy when invoke with callback.The address is "
+                                                + this.remoteAddress);
                                 break;
                             case SERVER_EXCEPTION:
                                 String msg = "Server exception when invoke with callback.Please check the server log! The address is "
-                                             + this.remoteAddress;
+                                        + this.remoteAddress;
                                 RpcResponseCommand resp = (RpcResponseCommand) response;
                                 resp.deserialize();
                                 Object ex = resp.getResponseObject();
@@ -142,18 +160,19 @@ public class RpcInvokeCallbackListener implements InvokeCallbackListener {
                                 break;
                             default:
                                 e = new InvokeException(
-                                    "Exception caught in invocation. The address is "
-                                            + this.remoteAddress + " responseStatus:"
-                                            + response.getResponseStatus(), future.getCause());
+                                        "Exception caught in invocation. The address is "
+                                                + this.remoteAddress + " responseStatus:"
+                                                + response.getResponseStatus(), future.getCause());
 
                         }
                     }
+                    //如果响应失败：执行异常回调函数
                     callback.onException(e);
                 } catch (Throwable e) {
                     logger
-                        .error(
-                            "Exception occurred in user defined InvokeCallback#onException() logic, The address is {}",
-                            this.remoteAddress, e);
+                            .error(
+                                    "Exception occurred in user defined InvokeCallback#onException() logic, The address is {}",
+                                    this.remoteAddress, e);
                 }
             } else {
                 ClassLoader oldClassLoader = null;
@@ -163,25 +182,30 @@ public class RpcInvokeCallbackListener implements InvokeCallbackListener {
                         Thread.currentThread().setContextClassLoader(future.getAppClassLoader());
                     }
                     response.setInvokeContext(future.getInvokeContext());
+
                     RpcResponseCommand rpcResponse = (RpcResponseCommand) response;
+                    //如果响应成功：反序列化响应
                     response.deserialize();
                     try {
+                        //抽取实际响应信息
+                        //执行成功回调函数
+                        System.out.println("=========执行成功回调函数==============");
                         callback.onResponse(rpcResponse.getResponseObject());
                     } catch (Throwable e) {
                         logger
-                            .error(
-                                "Exception occurred in user defined InvokeCallback#onResponse() logic.",
-                                e);
+                                .error(
+                                        "Exception occurred in user defined InvokeCallback#onResponse() logic.",
+                                        e);
                     }
                 } catch (CodecException e) {
                     logger
-                        .error(
-                            "CodecException caught on when deserialize response in RpcInvokeCallbackListener. The address is {}.",
-                            this.remoteAddress, e);
+                            .error(
+                                    "CodecException caught on when deserialize response in RpcInvokeCallbackListener. The address is {}.",
+                                    this.remoteAddress, e);
                 } catch (Throwable e) {
                     logger.error(
-                        "Exception caught in RpcInvokeCallbackListener. The address is {}",
-                        this.remoteAddress, e);
+                            "Exception caught in RpcInvokeCallbackListener. The address is {}",
+                            this.remoteAddress, e);
                 } finally {
                     if (oldClassLoader != null) {
                         Thread.currentThread().setContextClassLoader(oldClassLoader);
@@ -189,13 +213,5 @@ public class RpcInvokeCallbackListener implements InvokeCallbackListener {
                 }
             } // enf of else
         } // end of run
-    }
-
-    /** 
-     * @see com.alipay.remoting.InvokeCallbackListener#getRemoteAddress()
-     */
-    @Override
-    public String getRemoteAddress() {
-        return this.address;
     }
 }

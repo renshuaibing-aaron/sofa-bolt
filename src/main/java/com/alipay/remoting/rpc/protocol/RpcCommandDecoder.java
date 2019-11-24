@@ -16,27 +16,21 @@
  */
 package com.alipay.remoting.rpc.protocol;
 
-import java.net.InetSocketAddress;
-import java.util.List;
-
-import org.slf4j.Logger;
-
 import com.alipay.remoting.CommandCode;
 import com.alipay.remoting.CommandDecoder;
 import com.alipay.remoting.ResponseStatus;
 import com.alipay.remoting.log.BoltLoggerFactory;
-import com.alipay.remoting.rpc.HeartbeatAckCommand;
-import com.alipay.remoting.rpc.HeartbeatCommand;
-import com.alipay.remoting.rpc.RequestCommand;
-import com.alipay.remoting.rpc.ResponseCommand;
-import com.alipay.remoting.rpc.RpcCommandType;
-
+import com.alipay.remoting.rpc.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
+import org.slf4j.Logger;
+
+import java.net.InetSocketAddress;
+import java.util.List;
 
 /**
  * Command decoder for Rpc.
- * 
+ *解码真实类
  * @author jiangping
  * @version $Id: RpcCommandDecoder.java, v 0.1 2015-10-14 PM5:15:26 tao Exp $
  */
@@ -44,11 +38,12 @@ public class RpcCommandDecoder implements CommandDecoder {
 
     private static final Logger logger = BoltLoggerFactory.getLogger("RpcRemoting");
 
-    private int                 lessLen;
+    // 获取 RpcProtocol 协议下的响应头（20）和请求头（22）的长度，即为 20
+    private int lessLen;
 
     {
         lessLen = RpcProtocol.getResponseHeaderLength() < RpcProtocol.getRequestHeaderLength() ? RpcProtocol
-            .getResponseHeaderLength() : RpcProtocol.getRequestHeaderLength();
+                .getResponseHeaderLength() : RpcProtocol.getRequestHeaderLength();
     }
 
     /**
@@ -56,10 +51,16 @@ public class RpcCommandDecoder implements CommandDecoder {
      */
     @Override
     public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        System.out.println("======RpcCommandDecoder.decode==2222==============");
         // the less length between response header and request header
         if (in.readableBytes() >= lessLen) {
+
+            // 标记当前读指针的位置
             in.markReaderIndex();
+            // 读取 protocolCode
             byte protocol = in.readByte();
+
+            // 恢复读指针到读取 protocolCode 之前
             in.resetReaderIndex();
             if (protocol == RpcProtocol.PROTOCOL_CODE) {
                 /*
@@ -79,15 +80,27 @@ public class RpcCommandDecoder implements CommandDecoder {
                  * content
                  */
                 if (in.readableBytes() > 2) {
+                    // 读取 protocol_code
                     in.markReaderIndex();
+                    // 读取 type
                     in.readByte(); //version
                     byte type = in.readByte(); //type
+
+                    // 解码请求
                     if (type == RpcCommandType.REQUEST || type == RpcCommandType.REQUEST_ONEWAY) {
                         //decode request
                         if (in.readableBytes() >= RpcProtocol.getRequestHeaderLength() - 2) {
+
+                            // CommandCode ：请求命令类型，request / response / heartbeat
                             short cmdCode = in.readShort();
+
+                            // CommandVersion
                             byte ver2 = in.readByte();
+
+                            // 请求ID
                             int requestId = in.readInt();
+
+                            // 序列化器
                             byte serializer = in.readByte();
                             int timeout = in.readInt();
                             short classLen = in.readShort();
@@ -105,18 +118,24 @@ public class RpcCommandDecoder implements CommandDecoder {
                                     header = new byte[headerLen];
                                     in.readBytes(header);
                                 }
+                                // 解码内容，注意此时解码出来的都是一个 byte[]，需要序列化才能转化为真正对象
                                 if (contentLen > 0) {
                                     content = new byte[contentLen];
                                     in.readBytes(content);
                                 }
                             } else {// not enough data
+                                // 不够一个完整包，返回，等待累加器类架构足够的内容
                                 in.resetReaderIndex();
                                 return;
                             }
                             RequestCommand command;
                             if (cmdCode == CommandCode.HEARTBEAT_VALUE) {
+
+                                // 如果是心跳请求消息，直接创建一个 HeartbeatCommand
                                 command = new HeartbeatCommand();
                             } else {
+
+                                // 如果是正常请求，创建一个 RpcRequestCommand
                                 command = createRequestCommand(cmdCode);
                             }
                             command.setType(type);
@@ -132,6 +151,8 @@ public class RpcCommandDecoder implements CommandDecoder {
                         } else {
                             in.resetReaderIndex();
                         }
+
+                        // 解码响应
                     } else if (type == RpcCommandType.RESPONSE) {
                         //decode response
                         if (in.readableBytes() >= RpcProtocol.getResponseHeaderLength() - 2) {
@@ -180,7 +201,7 @@ public class RpcCommandDecoder implements CommandDecoder {
                             command.setContent(content);
                             command.setResponseTimeMillis(System.currentTimeMillis());
                             command.setResponseHost((InetSocketAddress) ctx.channel()
-                                .remoteAddress());
+                                    .remoteAddress());
                             out.add(command);
                         } else {
                             in.resetReaderIndex();

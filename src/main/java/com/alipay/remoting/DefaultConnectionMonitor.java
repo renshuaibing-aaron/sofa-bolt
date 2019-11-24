@@ -16,32 +16,35 @@
  */
 package com.alipay.remoting;
 
+import com.alipay.remoting.config.ConfigManager;
+import com.alipay.remoting.log.BoltLoggerFactory;
+import com.alipay.remoting.util.RunStateRecordedFutureTask;
+import org.slf4j.Logger;
+
 import java.util.Map;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.slf4j.Logger;
-
-import com.alipay.remoting.config.ConfigManager;
-import com.alipay.remoting.log.BoltLoggerFactory;
-import com.alipay.remoting.util.RunStateRecordedFutureTask;
-
 /**
- *  A default connection monitor that handle connections with strategies
+ * A default connection monitor that handle connections with strategies
  *
  * @author tsui
  * @version $Id: DefaultConnectionMonitor.java, v 0.1 2017-02-21 12:09 tsui Exp $
  */
 public class DefaultConnectionMonitor {
 
-    private static final Logger         logger = BoltLoggerFactory.getLogger("CommonDefault");
+    private static final Logger logger = BoltLoggerFactory.getLogger("CommonDefault");
 
-    /** Connection pools to monitor */
-    private DefaultConnectionManager    connectionManager;
+    /**
+     * Connection pools to monitor
+     */
+    private DefaultConnectionManager connectionManager;
 
-    /** Monitor strategy */
-    private ConnectionMonitorStrategy   strategy;
+    /**
+     * Monitor strategy
+     */
+    private ConnectionMonitorStrategy strategy;
 
     private ScheduledThreadPoolExecutor executor;
 
@@ -53,7 +56,6 @@ public class DefaultConnectionMonitor {
 
     /**
      * Start schedule task
-     *
      */
     public void start() {
         /** initial delay to execute schedule task, unit: ms */
@@ -63,7 +65,7 @@ public class DefaultConnectionMonitor {
         long period = ConfigManager.conn_monitor_period();
 
         this.executor = new ScheduledThreadPoolExecutor(1, new NamedThreadFactory(
-            "ConnectionMonitorThread", true), new ThreadPoolExecutor.AbortPolicy());
+                "ConnectionMonitorThread", true), new ThreadPoolExecutor.AbortPolicy());
         MonitorTask monitorTask = new MonitorTask();
         this.executor.scheduleAtFixedRate(monitorTask, initialDelay, period, TimeUnit.MILLISECONDS);
     }
@@ -93,7 +95,7 @@ public class DefaultConnectionMonitor {
             try {
                 if (strategy != null) {
                     Map<String, RunStateRecordedFutureTask<ConnectionPool>> connPools = connectionManager
-                        .getConnPools();
+                            .getConnPools();
                     strategy.monitor(connPools);
                 }
             } catch (Exception e) {

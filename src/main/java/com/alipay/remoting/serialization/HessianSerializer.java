@@ -16,10 +16,6 @@
  */
 package com.alipay.remoting.serialization;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-
 import com.alipay.hessian.ClassNameResolver;
 import com.alipay.hessian.internal.InternalNameBlackListFilter;
 import com.alipay.remoting.exception.CodecException;
@@ -27,9 +23,13 @@ import com.caucho.hessian.io.Hessian2Input;
 import com.caucho.hessian.io.Hessian2Output;
 import com.caucho.hessian.io.SerializerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
 /**
  * Hessian2 serializer.
- * 
+ *
  * @author jiangping
  * @version $Id: HessianSerializer.java, v 0.1 2015-10-4 PM9:51:55 tao Exp $
  */
@@ -44,7 +44,7 @@ public class HessianSerializer implements Serializer {
         serializerFactory.setClassNameResolver(resolver);
     }
 
-    /** 
+    /**
      * @see com.alipay.remoting.serialization.Serializer#serialize(java.lang.Object)
      */
     @Override
@@ -64,7 +64,6 @@ public class HessianSerializer implements Serializer {
     }
 
     /**
-     * 
      * @see com.alipay.remoting.serialization.Serializer#deserialize(byte[], java.lang.String)
      */
     @SuppressWarnings("unchecked")

@@ -16,12 +16,12 @@
  */
 package com.alipay.remoting.rpc;
 
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.alipay.remoting.config.ConfigurableInstance;
 import com.alipay.remoting.connection.ConnectionFactory;
 import com.alipay.remoting.connection.DefaultConnectionFactory;
 import com.alipay.remoting.rpc.protocol.UserProcessor;
+
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Default RPC connection factory impl.
@@ -32,7 +32,11 @@ public class RpcConnectionFactory extends DefaultConnectionFactory implements Co
 
     public RpcConnectionFactory(ConcurrentHashMap<String, UserProcessor<?>> userProcessors,
                                 ConfigurableInstance configInstance) {
+
+        // 创建 RpcCodec 编解码器工厂类
+        // 创建心跳处理器
+        // 创建业务逻辑处理器
         super(new RpcCodec(), new HeartbeatHandler(), new RpcHandler(userProcessors),
-            configInstance);
+                configInstance);
     }
 }

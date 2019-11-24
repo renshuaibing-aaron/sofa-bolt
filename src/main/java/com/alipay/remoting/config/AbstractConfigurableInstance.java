@@ -30,8 +30,8 @@ import com.alipay.remoting.config.switches.GlobalSwitch;
  */
 public class AbstractConfigurableInstance implements ConfigurableInstance {
     private ConfigContainer configContainer = new DefaultConfigContainer();
-    private GlobalSwitch    globalSwitch    = new GlobalSwitch();
-    private ConfigType      configType;
+    private GlobalSwitch globalSwitch = new GlobalSwitch();
+    private ConfigType configType;
 
     protected AbstractConfigurableInstance(ConfigType configType) {
         this.configType = configType;
@@ -56,9 +56,9 @@ public class AbstractConfigurableInstance implements ConfigurableInstance {
     @Override
     public int netty_buffer_low_watermark() {
         if (null != configContainer
-            && configContainer.contains(configType, ConfigItem.NETTY_BUFFER_LOW_WATER_MARK)) {
+                && configContainer.contains(configType, ConfigItem.NETTY_BUFFER_LOW_WATER_MARK)) {
             return (Integer) configContainer
-                .get(configType, ConfigItem.NETTY_BUFFER_LOW_WATER_MARK);
+                    .get(configType, ConfigItem.NETTY_BUFFER_LOW_WATER_MARK);
         } else {
             return ConfigManager.netty_buffer_low_watermark();
         }
@@ -67,9 +67,9 @@ public class AbstractConfigurableInstance implements ConfigurableInstance {
     @Override
     public int netty_buffer_high_watermark() {
         if (null != configContainer
-            && configContainer.contains(configType, ConfigItem.NETTY_BUFFER_HIGH_WATER_MARK)) {
+                && configContainer.contains(configType, ConfigItem.NETTY_BUFFER_HIGH_WATER_MARK)) {
             return (Integer) configContainer.get(configType,
-                ConfigItem.NETTY_BUFFER_HIGH_WATER_MARK);
+                    ConfigItem.NETTY_BUFFER_HIGH_WATER_MARK);
         } else {
             return ConfigManager.netty_buffer_high_watermark();
         }

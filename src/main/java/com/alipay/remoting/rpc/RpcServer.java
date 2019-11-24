@@ -16,32 +16,7 @@
  */
 package com.alipay.remoting.rpc;
 
-import java.net.InetSocketAddress;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
-
-import org.slf4j.Logger;
-
-import com.alipay.remoting.AbstractRemotingServer;
-import com.alipay.remoting.CommandCode;
-import com.alipay.remoting.Connection;
-import com.alipay.remoting.ConnectionEventHandler;
-import com.alipay.remoting.ConnectionEventListener;
-import com.alipay.remoting.ConnectionEventProcessor;
-import com.alipay.remoting.ConnectionEventType;
-import com.alipay.remoting.DefaultConnectionManager;
-import com.alipay.remoting.InvokeCallback;
-import com.alipay.remoting.InvokeContext;
-import com.alipay.remoting.NamedThreadFactory;
-import com.alipay.remoting.ProtocolCode;
-import com.alipay.remoting.ProtocolManager;
-import com.alipay.remoting.RandomSelectStrategy;
-import com.alipay.remoting.RemotingAddressParser;
-import com.alipay.remoting.RemotingProcessor;
-import com.alipay.remoting.RemotingServer;
-import com.alipay.remoting.ServerIdleHandler;
-import com.alipay.remoting.Url;
+import com.alipay.remoting.*;
 import com.alipay.remoting.codec.Codec;
 import com.alipay.remoting.config.ConfigManager;
 import com.alipay.remoting.config.switches.GlobalSwitch;
@@ -51,85 +26,57 @@ import com.alipay.remoting.rpc.protocol.UserProcessor;
 import com.alipay.remoting.rpc.protocol.UserProcessorRegisterHelper;
 import com.alipay.remoting.util.NettyEventLoopUtil;
 import com.alipay.remoting.util.RemotingUtil;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.UnpooledByteBufAllocator;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.WriteBufferWaterMark;
+import io.netty.channel.*;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
+import org.slf4j.Logger;
+
+import java.net.InetSocketAddress;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Server for Rpc.
- *
+ * <p>
  * Usage:
  * You can initialize RpcServer with one of the three constructors:
- *   {@link #RpcServer(int)}, {@link #RpcServer(int, boolean)}, {@link #RpcServer(int, boolean, boolean)}
+ * {@link #RpcServer(int)}, {@link #RpcServer(int, boolean)}, {@link #RpcServer(int, boolean, boolean)}
  * Then call start() to start a rpc server, and call stop() to stop a rpc server.
- *
+ * <p>
  * Notice:
- *   Once rpc server has been stopped, it can never be start again. You should init another instance of RpcServer to use.
+ * Once rpc server has been stopped, it can never be start again. You should init another instance of RpcServer to use.
  *
  * @author jiangping
  * @version $Id: RpcServer.java, v 0.1 2015-8-31 PM5:22:22 tao Exp $
  */
 public class RpcServer extends AbstractRemotingServer implements RemotingServer {
 
-    /** logger */
-    private static final Logger                         logger                  = BoltLoggerFactory
-                                                                                    .getLogger("RpcRemoting");
-    /** server bootstrap */
-    private ServerBootstrap                             bootstrap;
+    /**
+     * logger
+     */
+    private static final Logger logger = BoltLoggerFactory
+            .getLogger("RpcRemoting");
 
-    /** channelFuture */
-    private ChannelFuture                               channelFuture;
+    //（static类变量，实现多个 RpcServer 实例共享 workerGroup）
+    /**
+     * worker event loop group. Reuse I/O worker threads between rpc servers.
+     */
+    private static final EventLoopGroup workerGroup = NettyEventLoopUtil.newEventLoopGroup(
+                    Runtime.getRuntime().availableProcessors() * 2,
+                    new NamedThreadFactory("Rpc-netty-server-worker",true));
 
-    /** connection event handler */
-    private ConnectionEventHandler                      connectionEventHandler;
+    /**
+     * boss event loop group, boss group should not be daemon, need shutdown manually
+     */
+    private final EventLoopGroup bossGroup = NettyEventLoopUtil.newEventLoopGroup(1,
+            new NamedThreadFactory("Rpc-netty-server-boss", false));
 
-    /** connection event listener */
-    private ConnectionEventListener                     connectionEventListener = new ConnectionEventListener();
-
-    /** user processors of rpc server */
-    private ConcurrentHashMap<String, UserProcessor<?>> userProcessors          = new ConcurrentHashMap<String, UserProcessor<?>>(
-                                                                                    4);
-
-    /** boss event loop group, boss group should not be daemon, need shutdown manually*/
-    private final EventLoopGroup                        bossGroup               = NettyEventLoopUtil
-                                                                                    .newEventLoopGroup(
-                                                                                        1,
-                                                                                        new NamedThreadFactory(
-                                                                                            "Rpc-netty-server-boss",
-                                                                                            false));
-    /** worker event loop group. Reuse I/O worker threads between rpc servers. */
-    private static final EventLoopGroup                 workerGroup             = NettyEventLoopUtil
-                                                                                    .newEventLoopGroup(
-                                                                                        Runtime
-                                                                                            .getRuntime()
-                                                                                            .availableProcessors() * 2,
-                                                                                        new NamedThreadFactory(
-                                                                                            "Rpc-netty-server-worker",
-                                                                                            true));
-
-    /** address parser to get custom args */
-    private RemotingAddressParser                       addressParser;
-
-    /** connection manager */
-    private DefaultConnectionManager                    connectionManager;
-
-    /** rpc remoting */
-    protected RpcRemoting                               rpcRemoting;
-
-    /** rpc codec */
-    private Codec                                       codec                   = new RpcCodec();
 
     static {
         if (workerGroup instanceof NioEventLoopGroup) {
@@ -139,12 +86,52 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
         }
     }
 
+
+    /**
+     * rpc remoting
+     */
+    protected RpcRemoting rpcRemoting;
+    /**
+     * server bootstrap
+     */
+    private ServerBootstrap bootstrap;
+    /**
+     * channelFuture
+     */
+    private ChannelFuture channelFuture;
+    /**
+     * connection event handler
+     */
+    private ConnectionEventHandler connectionEventHandler;
+    /**
+     * connection event listener
+     */
+    private ConnectionEventListener connectionEventListener = new ConnectionEventListener();
+    /**
+     * user processors of rpc server
+     */
+    private ConcurrentHashMap<String, UserProcessor<?>> userProcessors = new ConcurrentHashMap<String, UserProcessor<?>>(
+            4);
+    /**
+     * address parser to get custom args
+     */
+    private RemotingAddressParser addressParser;
+    /**
+     * connection manager
+     */
+    private DefaultConnectionManager connectionManager;
+    /**
+     * rpc codec
+     */
+    private Codec codec = new RpcCodec();
+
     /**
      * Construct a rpc server. <br>
-     *
+     * <p>
      * Note:<br>
      * You can only use invoke methods with params {@link Connection}, for example {@link #invokeSync(Connection, Object, int)} <br>
      * Otherwise {@link UnsupportedOperationException} will be thrown.
+     *
      */
     public RpcServer(int port) {
         this(port, false);
@@ -152,7 +139,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
 
     /**
      * Construct a rpc server. <br>
-     *
+     * <p>
      * Note:<br>
      * You can only use invoke methods with params {@link Connection}, for example {@link #invokeSync(Connection, Object, int)} <br>
      * Otherwise {@link UnsupportedOperationException} will be thrown.
@@ -172,12 +159,13 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * </ul>
      * </ul>
      *
-     * @param port listened port
+     * @param port             listened port
      * @param manageConnection true to enable connection management feature
      */
     public RpcServer(int port, boolean manageConnection) {
         super(port);
         /* server connection management feature enabled or not, default value false, means disabled. */
+        //false
         if (manageConnection) {
             this.switches().turnOn(GlobalSwitch.SERVER_MANAGE_CONNECTION_SWITCH);
         }
@@ -194,7 +182,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * </ul>
      * </ul>
      *
-     * @param port listened port
+     * @param port             listened port
      * @param manageConnection true to enable connection management feature
      */
     public RpcServer(String ip, int port, boolean manageConnection) {
@@ -207,12 +195,12 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
 
     /**
      * Construct a rpc server. <br>
-     *
+     * <p>
      * You can construct a rpc server with synchronous or asynchronous stop strategy by {@param syncStop}.
      *
-     * @param port listened port
+     * @param port             listened port
      * @param manageConnection manage connection
-     * @param syncStop true to enable stop in synchronous way
+     * @param syncStop         true to enable stop in synchronous way
      */
     public RpcServer(int port, boolean manageConnection, boolean syncStop) {
         this(port, manageConnection);
@@ -232,17 +220,26 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
             this.connectionEventHandler.setConnectionManager(this.connectionManager);
             this.connectionEventHandler.setConnectionEventListener(this.connectionEventListener);
         } else {
+            //连接事件处理器
+            //关联连接事件处理器与连接事件监听器
+            //关联连接事件处理器与连接事件监听器，并由连接事件处理器中的连接执行器来执行连接监听器中的 processor
             this.connectionEventHandler = new ConnectionEventHandler(switches());
+
+
             this.connectionEventHandler.setConnectionEventListener(this.connectionEventListener);
         }
+
+        //创建真正的请求执行客户端（发起调用类） RpcRemoting执行静态方法
         initRpcRemoting();
+
+        //配置 netty 服务端
         this.bootstrap = new ServerBootstrap();
         this.bootstrap.group(bossGroup, workerGroup)
-            .channel(NettyEventLoopUtil.getServerSocketChannelClass())
-            .option(ChannelOption.SO_BACKLOG, ConfigManager.tcp_so_backlog())
-            .option(ChannelOption.SO_REUSEADDR, ConfigManager.tcp_so_reuseaddr())
-            .childOption(ChannelOption.TCP_NODELAY, ConfigManager.tcp_nodelay())
-            .childOption(ChannelOption.SO_KEEPALIVE, ConfigManager.tcp_so_keepalive());
+                .channel(NettyEventLoopUtil.getServerSocketChannelClass())
+                .option(ChannelOption.SO_BACKLOG, ConfigManager.tcp_so_backlog())
+                .option(ChannelOption.SO_REUSEADDR, ConfigManager.tcp_so_reuseaddr())
+                .childOption(ChannelOption.TCP_NODELAY, ConfigManager.tcp_nodelay())
+                .childOption(ChannelOption.SO_KEEPALIVE, ConfigManager.tcp_so_keepalive());
 
         // set write buffer water mark
         initWriteBufferWaterMark();
@@ -250,33 +247,53 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
         // init byte buf allocator
         if (ConfigManager.netty_buffer_pooled()) {
             this.bootstrap.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+                    .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
         } else {
             this.bootstrap.option(ChannelOption.ALLOCATOR, UnpooledByteBufAllocator.DEFAULT)
-                .childOption(ChannelOption.ALLOCATOR, UnpooledByteBufAllocator.DEFAULT);
+                    .childOption(ChannelOption.ALLOCATOR, UnpooledByteBufAllocator.DEFAULT);
         }
 
         // enable trigger mode for epoll if need
         NettyEventLoopUtil.enableTriggeredMode(bootstrap);
 
+        // 开启心跳检测开关
         final boolean idleSwitch = ConfigManager.tcp_idle_switch();
+        // 服务端的心跳空闲时间（默认90s）-Dbolt.tcp.server.idle.interval=90000
         final int idleTime = ConfigManager.tcp_server_idle();
+
+        // 服务端心跳处理器（直接关闭连接）
         final ChannelHandler serverIdleHandler = new ServerIdleHandler();
+
+        //netty 业务逻辑处理器
         final RpcHandler rpcHandler = new RpcHandler(true, this.userProcessors);
+
         this.bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
 
             @Override
             protected void initChannel(SocketChannel channel) {
+                System.out.println("**********channel 获取连接？**************");
                 ChannelPipeline pipeline = channel.pipeline();
+
+                //根据具体的协议 拿出实际的编解码器
+               // 编码链 ProtocolCodeBasedEncoder -> CommandEncoder
+               // 解码链 RpcProtocolDecoder -> CommandDecoder
+
+
+                //解码器
                 pipeline.addLast("decoder", codec.newDecoder());
+                //编码器
                 pipeline.addLast("encoder", codec.newEncoder());
+
                 if (idleSwitch) {
                     pipeline.addLast("idleStateHandler", new IdleStateHandler(0, 0, idleTime,
-                        TimeUnit.MILLISECONDS));
+                            TimeUnit.MILLISECONDS));
                     pipeline.addLast("serverIdleHandler", serverIdleHandler);
                 }
+                //链接管理器
                 pipeline.addLast("connectionEventHandler", connectionEventHandler);
                 pipeline.addLast("handler", rpcHandler);
+
+               // System.out.println("netty 连接 channel 创建成功后，将 channel 包装为 Connection 对象");
                 createConnection(channel);
             }
 
@@ -321,7 +338,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
             this.bossGroup.shutdownGracefully();
         }
         if (this.switches().isOn(GlobalSwitch.SERVER_MANAGE_CONNECTION_SWITCH)
-            && null != this.connectionManager) {
+                && null != this.connectionManager) {
             this.connectionManager.removeAll();
             logger.warn("Close all connections from server side!");
         }
@@ -333,8 +350,10 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * init rpc remoting
      */
     protected void initRpcRemoting() {
+
+
         this.rpcRemoting = new RpcServerRemoting(new RpcCommandFactory(), this.addressParser,
-            this.connectionManager);
+                this.connectionManager);
     }
 
     /**
@@ -343,7 +362,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     @Override
     public void registerProcessor(byte protocolCode, CommandCode cmd, RemotingProcessor<?> processor) {
         ProtocolManager.getProtocol(ProtocolCode.fromBytes(protocolCode)).getCommandHandler()
-            .registerProcessor(cmd, processor);
+                .registerProcessor(cmd, processor);
     }
 
     /**
@@ -352,13 +371,13 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     @Override
     public void registerDefaultExecutor(byte protocolCode, ExecutorService executor) {
         ProtocolManager.getProtocol(ProtocolCode.fromBytes(protocolCode)).getCommandHandler()
-            .registerDefaultExecutor(executor);
+                .registerDefaultExecutor(executor);
     }
 
     /**
      * Add processor to process connection event.
      *
-     * @param type connection event type
+     * @param type      connection event type
      * @param processor connection event processor
      */
     public void addConnectionEventProcessor(ConnectionEventType type,
@@ -380,11 +399,11 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * One way invocation using a string address, address format example - 127.0.0.1:12200?key1=value1&key2=value2 <br>
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
-     *   <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
+     * <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
+     * </ol>
      *
      * @param addr
      * @param request
@@ -392,7 +411,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * @throws InterruptedException
      */
     public void oneway(final String addr, final Object request) throws RemotingException,
-                                                               InterruptedException {
+            InterruptedException {
         check();
         this.rpcRemoting.oneway(addr, request, null);
     }
@@ -407,8 +426,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * @throws InterruptedException
      */
     public void oneway(final String addr, final Object request, final InvokeContext invokeContext)
-                                                                                                  throws RemotingException,
-                                                                                                  InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         this.rpcRemoting.oneway(addr, request, invokeContext);
     }
@@ -417,10 +436,10 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * One way invocation using a parsed {@link Url} <br>
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
+     * </ol>
      *
      * @param url
      * @param request
@@ -428,7 +447,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * @throws InterruptedException
      */
     public void oneway(final Url url, final Object request) throws RemotingException,
-                                                           InterruptedException {
+            InterruptedException {
         check();
         this.rpcRemoting.oneway(url, request, null);
     }
@@ -443,8 +462,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * @throws InterruptedException
      */
     public void oneway(final Url url, final Object request, final InvokeContext invokeContext)
-                                                                                              throws RemotingException,
-                                                                                              InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         this.rpcRemoting.oneway(url, request, invokeContext);
     }
@@ -453,7 +472,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * One way invocation using a {@link Connection} <br>
      * <p>
      * Notice:<br>
-     *   <b>DO NOT modify the request object concurrently when this method is called.</b>
+     * <b>DO NOT modify the request object concurrently when this method is called.</b>
      *
      * @param conn
      * @param request
@@ -480,11 +499,11 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * Synchronous invocation using a string address, address format example - 127.0.0.1:12200?key1=value1&key2=value2 <br>
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
-     *   <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
+     * <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
+     * </ol>
      *
      * @param addr
      * @param request
@@ -494,8 +513,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * @throws InterruptedException
      */
     public Object invokeSync(final String addr, final Object request, final int timeoutMillis)
-                                                                                              throws RemotingException,
-                                                                                              InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeSync(addr, request, null, timeoutMillis);
     }
@@ -513,8 +532,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public Object invokeSync(final String addr, final Object request,
                              final InvokeContext invokeContext, final int timeoutMillis)
-                                                                                        throws RemotingException,
-                                                                                        InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeSync(addr, request, invokeContext, timeoutMillis);
     }
@@ -523,10 +542,10 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * Synchronous invocation using a parsed {@link Url} <br>
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
+     * </ol>
      *
      * @param url
      * @param request
@@ -536,7 +555,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * @throws InterruptedException
      */
     public Object invokeSync(Url url, Object request, int timeoutMillis) throws RemotingException,
-                                                                        InterruptedException {
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeSync(url, request, null, timeoutMillis);
     }
@@ -554,8 +573,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public Object invokeSync(final Url url, final Object request,
                              final InvokeContext invokeContext, final int timeoutMillis)
-                                                                                        throws RemotingException,
-                                                                                        InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeSync(url, request, invokeContext, timeoutMillis);
     }
@@ -564,7 +583,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * Synchronous invocation using a {@link Connection} <br>
      * <p>
      * Notice:<br>
-     *   <b>DO NOT modify the request object concurrently when this method is called.</b>
+     * <b>DO NOT modify the request object concurrently when this method is called.</b>
      *
      * @param conn
      * @param request
@@ -574,8 +593,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * @throws InterruptedException
      */
     public Object invokeSync(final Connection conn, final Object request, final int timeoutMillis)
-                                                                                                  throws RemotingException,
-                                                                                                  InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         return this.rpcRemoting.invokeSync(conn, request, null, timeoutMillis);
     }
 
@@ -592,8 +611,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public Object invokeSync(final Connection conn, final Object request,
                              final InvokeContext invokeContext, final int timeoutMillis)
-                                                                                        throws RemotingException,
-                                                                                        InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         return this.rpcRemoting.invokeSync(conn, request, invokeContext, timeoutMillis);
     }
 
@@ -602,11 +621,11 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * You can get result use the returned {@link RpcResponseFuture}.
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
-     *   <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
+     * <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
+     * </ol>
      *
      * @param addr
      * @param request
@@ -617,7 +636,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public RpcResponseFuture invokeWithFuture(final String addr, final Object request,
                                               final int timeoutMillis) throws RemotingException,
-                                                                      InterruptedException {
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeWithFuture(addr, request, null, timeoutMillis);
     }
@@ -636,7 +655,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     public RpcResponseFuture invokeWithFuture(final String addr, final Object request,
                                               final InvokeContext invokeContext,
                                               final int timeoutMillis) throws RemotingException,
-                                                                      InterruptedException {
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeWithFuture(addr, request, invokeContext, timeoutMillis);
     }
@@ -646,10 +665,10 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * You can get result use the returned {@link RpcResponseFuture}.
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
+     * </ol>
      *
      * @param url
      * @param request
@@ -660,7 +679,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public RpcResponseFuture invokeWithFuture(final Url url, final Object request,
                                               final int timeoutMillis) throws RemotingException,
-                                                                      InterruptedException {
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeWithFuture(url, request, null, timeoutMillis);
     }
@@ -679,7 +698,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     public RpcResponseFuture invokeWithFuture(final Url url, final Object request,
                                               final InvokeContext invokeContext,
                                               final int timeoutMillis) throws RemotingException,
-                                                                      InterruptedException {
+            InterruptedException {
         check();
         return this.rpcRemoting.invokeWithFuture(url, request, invokeContext, timeoutMillis);
     }
@@ -689,7 +708,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * You can get result use the returned {@link RpcResponseFuture}.
      * <p>
      * Notice:<br>
-     *   <b>DO NOT modify the request object concurrently when this method is called.</b>
+     * <b>DO NOT modify the request object concurrently when this method is called.</b>
      *
      * @param conn
      * @param request
@@ -725,11 +744,11 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * You can specify an implementation of {@link InvokeCallback} to get the result.
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
-     *   <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the string address to find a available client connection, if none then throw exception</li>
+     * <li>Unlike rpc client, address arguments takes no effect here, for rpc server will not create connection.</li>
+     * </ol>
      *
      * @param addr
      * @param request
@@ -740,8 +759,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public void invokeWithCallback(final String addr, final Object request,
                                    final InvokeCallback invokeCallback, final int timeoutMillis)
-                                                                                                throws RemotingException,
-                                                                                                InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         this.rpcRemoting.invokeWithCallback(addr, request, null, invokeCallback, timeoutMillis);
     }
@@ -760,11 +779,11 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     public void invokeWithCallback(final String addr, final Object request,
                                    final InvokeContext invokeContext,
                                    final InvokeCallback invokeCallback, final int timeoutMillis)
-                                                                                                throws RemotingException,
-                                                                                                InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         this.rpcRemoting.invokeWithCallback(addr, request, invokeContext, invokeCallback,
-            timeoutMillis);
+                timeoutMillis);
     }
 
     /**
@@ -772,10 +791,10 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * You can specify an implementation of {@link InvokeCallback} to get the result.
      * <p>
      * Notice:<br>
-     *   <ol>
-     *   <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
-     *   <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
-     *   </ol>
+     * <ol>
+     * <li><b>DO NOT modify the request object concurrently when this method is called.</b></li>
+     * <li>When do invocation, use the parsed {@link Url} to find a available client connection, if none then throw exception</li>
+     * </ol>
      *
      * @param url
      * @param request
@@ -786,8 +805,8 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public void invokeWithCallback(final Url url, final Object request,
                                    final InvokeCallback invokeCallback, final int timeoutMillis)
-                                                                                                throws RemotingException,
-                                                                                                InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         this.rpcRemoting.invokeWithCallback(url, request, null, invokeCallback, timeoutMillis);
     }
@@ -806,11 +825,11 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     public void invokeWithCallback(final Url url, final Object request,
                                    final InvokeContext invokeContext,
                                    final InvokeCallback invokeCallback, final int timeoutMillis)
-                                                                                                throws RemotingException,
-                                                                                                InterruptedException {
+            throws RemotingException,
+            InterruptedException {
         check();
         this.rpcRemoting.invokeWithCallback(url, request, invokeContext, invokeCallback,
-            timeoutMillis);
+                timeoutMillis);
     }
 
     /**
@@ -818,7 +837,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      * You can specify an implementation of {@link InvokeCallback} to get the result.
      * <p>
      * Notice:<br>
-     *   <b>DO NOT modify the request object concurrently when this method is called.</b>
+     * <b>DO NOT modify the request object concurrently when this method is called.</b>
      *
      * @param conn
      * @param request
@@ -828,7 +847,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      */
     public void invokeWithCallback(final Connection conn, final Object request,
                                    final InvokeCallback invokeCallback, final int timeoutMillis)
-                                                                                                throws RemotingException {
+            throws RemotingException {
         this.rpcRemoting.invokeWithCallback(conn, request, null, invokeCallback, timeoutMillis);
     }
 
@@ -844,9 +863,9 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     public void invokeWithCallback(final Connection conn, final Object request,
                                    final InvokeContext invokeContext,
                                    final InvokeCallback invokeCallback, final int timeoutMillis)
-                                                                                                throws RemotingException {
+            throws RemotingException {
         this.rpcRemoting.invokeWithCallback(conn, request, invokeContext, invokeCallback,
-            timeoutMillis);
+                timeoutMillis);
     }
 
     /**
@@ -880,7 +899,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     private void check() {
         if (!this.switches().isOn(GlobalSwitch.SERVER_MANAGE_CONNECTION_SWITCH)) {
             throw new UnsupportedOperationException(
-                "Please enable connection manage feature of Rpc Server before call this method! See comments in constructor RpcServer(int port, boolean manageConnection) to find how to enable!");
+                    "Please enable connection manage feature of Rpc Server before call this method! See comments in constructor RpcServer(int port, boolean manageConnection) to find how to enable!");
         }
     }
 
@@ -892,17 +911,15 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
         int highWaterMark = this.netty_buffer_high_watermark();
         if (lowWaterMark > highWaterMark) {
             throw new IllegalArgumentException(
-                String
-                    .format(
-                        "[server side] bolt netty high water mark {%s} should not be smaller than low water mark {%s} bytes)",
-                        highWaterMark, lowWaterMark));
+                    String.format("[server side] bolt netty high water mark {%s} should not be smaller than low water mark {%s} bytes)",
+                                    highWaterMark, lowWaterMark));
         } else {
             logger.warn(
-                "[server side] bolt netty low water mark is {} bytes, high water mark is {} bytes",
-                lowWaterMark, highWaterMark);
+                    "[server side] bolt netty low water mark is {} bytes, high water mark is {} bytes",
+                    lowWaterMark, highWaterMark);
         }
         this.bootstrap.childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(
-            lowWaterMark, highWaterMark));
+                lowWaterMark, highWaterMark));
     }
 
     // ~~~ getter and setter
