@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc;
 
 import com.alipay.remoting.*;
@@ -42,8 +26,7 @@ public class RpcClient extends AbstractConfigurableInstance {
     /**
      * logger
      */
-    private static final Logger logger = BoltLoggerFactory
-            .getLogger("RpcRemoting");
+    private static final Logger logger = BoltLoggerFactory.getLogger("RpcRemoting");
     /**
      * rpc remoting
      */
@@ -60,8 +43,7 @@ public class RpcClient extends AbstractConfigurableInstance {
     /**
      * connection event handler
      */
-    private ConnectionEventHandler connectionEventHandler = new RpcConnectionEventHandler(
-            switches());
+    private ConnectionEventHandler connectionEventHandler = new RpcConnectionEventHandler(switches());
     /**
      * reconnect manager
      */
@@ -77,8 +59,7 @@ public class RpcClient extends AbstractConfigurableInstance {
     /**
      * connection select strategy
      */
-    private ConnectionSelectStrategy connectionSelectStrategy = new RandomSelectStrategy(
-            switches());
+    private ConnectionSelectStrategy connectionSelectStrategy = new RandomSelectStrategy(switches());
     /**
      * connection manager
      */
@@ -125,22 +106,21 @@ public class RpcClient extends AbstractConfigurableInstance {
         this.taskScanner.add(this.connectionManager);
         this.taskScanner.start();
 
+        // 开启连接监听开关
         if (switches().isOn(GlobalSwitch.CONN_MONITOR_SWITCH)) {
             if (monitorStrategy == null) {
                 ScheduledDisconnectStrategy strategy = new ScheduledDisconnectStrategy();
                 connectionMonitor = new DefaultConnectionMonitor(strategy, this.connectionManager);
             } else {
-                connectionMonitor = new DefaultConnectionMonitor(monitorStrategy,
-                        this.connectionManager);
+                connectionMonitor = new DefaultConnectionMonitor(monitorStrategy, this.connectionManager);
             }
             connectionMonitor.start();
             logger.warn("Switch on connection monitor");
         }
 
 
-        //开启自动建连开关
+        // 开启重连开关
         if (switches().isOn(GlobalSwitch.CONN_RECONNECT_SWITCH)) {
-
             // 创建重连管理器，启动重连线程
             reconnectManager = new ReconnectManager(connectionManager);
             connectionEventHandler.setReconnectManager(reconnectManager);
@@ -242,9 +222,7 @@ public class RpcClient extends AbstractConfigurableInstance {
      * @throws RemotingException
      * @throws InterruptedException
      */
-    public void oneway(final Url url, final Object request, final InvokeContext invokeContext)
-            throws RemotingException,
-            InterruptedException {
+    public void oneway(final Url url, final Object request, final InvokeContext invokeContext) throws RemotingException, InterruptedException {
         this.rpcRemoting.oneway(url, request, invokeContext);
     }
 
@@ -298,8 +276,9 @@ public class RpcClient extends AbstractConfigurableInstance {
      * @throws InterruptedException
      */
     public Object invokeSync(final String addr, final Object request, final int timeoutMillis)
-            throws RemotingException,
-            InterruptedException {
+            throws RemotingException,InterruptedException {
+
+        //"127.0.0.1:8888", request,  null, 30 * 1000
         return this.rpcRemoting.invokeSync(addr, request, null, timeoutMillis);
     }
 

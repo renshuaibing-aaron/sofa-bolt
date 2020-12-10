@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc;
 
 import com.alipay.remoting.*;
@@ -22,7 +6,7 @@ import com.alipay.remoting.util.RemotingUtil;
 
 /**
  * Rpc client remoting
- *
+ *客户端远程调用执行类
  * @author xiaomin.cxm
  * @version $Id: RpcClientRemoting.java, v 0.1 Apr 14, 2016 11:58:56 AM xiaomin.cxm Exp $
  */
@@ -37,16 +21,17 @@ public class RpcClientRemoting extends RpcRemoting {
      * @see com.alipay.remoting.rpc.RpcRemoting#oneway(com.alipay.remoting.Url, java.lang.Object, InvokeContext)
      */
     @Override
-    public void oneway(Url url, Object request, InvokeContext invokeContext)
-            throws RemotingException,
-            InterruptedException {
+    public void oneway(Url url, Object request, InvokeContext invokeContext) throws RemotingException,InterruptedException {
+        // 获取或者创建 Connection
         final Connection conn = getConnectionAndInitInvokeContext(url, invokeContext);
+        // 检测连接
         this.connectionManager.check(conn);
         this.oneway(conn, request, invokeContext);
     }
 
     /**
      * @see com.alipay.remoting.rpc.RpcRemoting#invokeSync(com.alipay.remoting.Url, java.lang.Object, InvokeContext, int)
+     * //"127.0.0.1:8888", request,  null, 30 * 1000
      */
     @Override
     public Object invokeSync(Url url, Object request, InvokeContext invokeContext, int timeoutMillis)
@@ -118,9 +103,11 @@ public class RpcClientRemoting extends RpcRemoting {
         long start = System.currentTimeMillis();
         Connection conn;
         try {
+            //DefaultConnectionManager.getAndCreateIfAbsent(Url url)
             conn = this.connectionManager.getAndCreateIfAbsent(url);
 
         } finally {
+            // 记录连接获取或者创建的时间消耗
             if (null != invokeContext) {
                 invokeContext.putIfAbsent(InvokeContext.CLIENT_CONN_CREATETIME,
                         (System.currentTimeMillis() - start));

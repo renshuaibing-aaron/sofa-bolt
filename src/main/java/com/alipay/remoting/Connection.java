@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting;
 
 import com.alipay.remoting.log.BoltLoggerFactory;
@@ -37,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An abstraction of socket channel.
- *
+ * todo Connection 连接元数据：包裹了 Netty channel 实例
  * 连接元数据
  * @author yunliang.shi
  * @version $Id: Connection.java, v 0.1 Mar 10, 2016 11:30:54 AM yunliang.shi Exp $
@@ -47,34 +31,32 @@ public class Connection {
     /**
      * Attribute key for connection
      */
-    public static final AttributeKey<Connection> CONNECTION = AttributeKey
-            .valueOf("connection");
+    public static final AttributeKey<Connection> CONNECTION = AttributeKey.valueOf("connection");
     /**
      * Attribute key for heartbeat count
      */
-    public static final AttributeKey<Integer> HEARTBEAT_COUNT = AttributeKey
-            .valueOf("heartbeatCount");
+    public static final AttributeKey<Integer> HEARTBEAT_COUNT = AttributeKey.valueOf("heartbeatCount");
     /**
      * Attribute key for heartbeat switch for each connection
      */
-    public static final AttributeKey<Boolean> HEARTBEAT_SWITCH = AttributeKey
-            .valueOf("heartbeatSwitch");
+    public static final AttributeKey<Boolean> HEARTBEAT_SWITCH = AttributeKey.valueOf("heartbeatSwitch");
     /**
      * Attribute key for protocol
      */
-    public static final AttributeKey<ProtocolCode> PROTOCOL = AttributeKey
-            .valueOf("protocol");
+    public static final AttributeKey<ProtocolCode> PROTOCOL = AttributeKey.valueOf("protocol");
     /**
      * Attribute key for version
      */
-    public static final AttributeKey<Byte> VERSION = AttributeKey
-            .valueOf("version");
+    public static final AttributeKey<Byte> VERSION = AttributeKey.valueOf("version");
+
     private static final Logger logger = BoltLoggerFactory
             .getLogger("CommonDefault");
     /**
      * no reference of the current connection
      */
     private static final int NO_REFERENCE = 0;
+
+
     private final ConcurrentHashMap<Integer, InvokeFuture> invokeFutureMap = new ConcurrentHashMap<Integer, InvokeFuture>(
             4);
     private final ConcurrentHashMap<Integer/* id */, String/* poolKey */> id2PoolKey = new ConcurrentHashMap<Integer, String>(
@@ -85,9 +67,14 @@ public class Connection {
      */
     private final AtomicInteger referenceCount = new AtomicInteger();
     private Channel channel;
+
     private ProtocolCode protocolCode;
+
+
     private byte version = RpcProtocolV2.PROTOCOL_VERSION_1;
+    // 数据总线
     private Url url;
+
     private Set<String> poolKeys = new ConcurrentHashSet<String>();
     private AtomicBoolean closed = new AtomicBoolean(
             false);
@@ -112,6 +99,7 @@ public class Connection {
     public Connection(Channel channel, Url url) {
         this(channel);
         this.url = url;
+        // url.getUniqueKey() 默认为 ip:port
         this.poolKeys.add(url.getUniqueKey());
     }
 
@@ -146,7 +134,8 @@ public class Connection {
      * Initialization.
      */
     private void init() {
-        System.out.println(" 添加一系列的附属属性：PROTOCOL 和 VERSION 会用在 Codec 编解码中；HEARTBEAT_COUNT 和 HEARTBEAT_SWITCH 会用在心跳");
+        System.out.println(" 添加一系列的附属属性：PROTOCOL 和 VERSION 会用在 Codec 编解码中；" +
+                "HEARTBEAT_COUNT 和 HEARTBEAT_SWITCH 会用在心跳");
         this.channel.attr(HEARTBEAT_COUNT).set(new Integer(0));
         this.channel.attr(PROTOCOL).set(this.protocolCode);
         this.channel.attr(VERSION).set(this.version);
@@ -159,6 +148,7 @@ public class Connection {
      * @return
      */
     public boolean isFine() {
+        // channel 可用
         return this.channel != null && this.channel.isActive();
     }
 

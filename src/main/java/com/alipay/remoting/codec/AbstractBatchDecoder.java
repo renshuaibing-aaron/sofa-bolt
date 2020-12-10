@@ -1,18 +1,3 @@
-/*
- * Copyright 2012 The Netty Project
- *
- * The Netty Project licenses this file to you under the Apache License,
- * version 2.0 (the "License"); you may not use this file except in compliance
- * with the License. You may obtain a copy of the License at:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations
- * under the License.
- */
 package com.alipay.remoting.codec;
 
 import io.netty.buffer.ByteBuf;
@@ -61,12 +46,13 @@ public abstract class AbstractBatchDecoder extends ChannelInboundHandlerAdapter 
      */
     public static final Cumulator MERGE_CUMULATOR = new Cumulator() {
 
-        // 将 in 累加到 cumulation
+        // todo 将 in 累加到 cumulation
         @Override
         public ByteBuf cumulate(ByteBufAllocator alloc,ByteBuf cumulation,ByteBuf in) {
 
             // 累加之后的 ByteBuf
             ByteBuf buffer;
+            // 如果 cumulation 放不下 in 了，则进行扩容
             if (cumulation.writerIndex() > cumulation
                     .maxCapacity()
                     - in.readableBytes()
@@ -149,6 +135,7 @@ public abstract class AbstractBatchDecoder extends ChannelInboundHandlerAdapter 
 
     // 每调用一次 channelRead，只解码一个消息（默认为false，即批量尽可能多的对消息进行解码）
     private boolean singleDecode;
+
     private boolean decodeWasNull;
     // 是否是第一次将 ByteBuf 添加到累加器
     private boolean first;
@@ -268,7 +255,7 @@ public abstract class AbstractBatchDecoder extends ChannelInboundHandlerAdapter 
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        //判断类型
+        //判断类型  如果是ByteBuf，进行解码
         if (msg instanceof ByteBuf) {
             // 1. 创建或者从 netty 的回收池中获取一个 RecyclableArrayList 实例
             RecyclableArrayList out = RecyclableArrayList.newInstance();

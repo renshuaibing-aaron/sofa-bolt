@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting;
 
 import com.alipay.remoting.exception.RemotingException;
@@ -55,8 +39,7 @@ public abstract class BaseRemoting {
      * @throws InterruptedException
      * @throws RemotingException
      */
-    protected RemotingCommand invokeSync(final Connection conn, final RemotingCommand request,
-                                         final int timeoutMillis) throws RemotingException,
+    protected RemotingCommand invokeSync(final Connection conn, final RemotingCommand request, final int timeoutMillis) throws RemotingException,
             InterruptedException {
 
         //创建InvokeFuture，并将 { invokeId : InvokeFuture实例} 存储到 Connection 的 Map<Integer, InvokeFuture> invokeFutureMap
@@ -87,7 +70,7 @@ public abstract class BaseRemoting {
             }
             logger.error("Exception caught when sending invocation, id={}", request.getId(), e);
         }
-       //当前线程阻塞这里
+       //当前线程阻塞在这里，等待响应返回并填充到future后，再进行唤醒
         RemotingCommand response = future.waitResponse(timeoutMillis);
 
       //

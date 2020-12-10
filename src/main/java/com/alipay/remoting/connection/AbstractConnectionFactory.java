@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.connection;
 
 import com.alipay.remoting.*;
@@ -42,22 +26,20 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class AbstractConnectionFactory implements ConnectionFactory {
 
-    private static final Logger logger = BoltLoggerFactory
-            .getLogger(AbstractConnectionFactory.class);
+    private static final Logger logger = BoltLoggerFactory.getLogger(AbstractConnectionFactory.class);
 
 
-    private static final EventLoopGroup workerGroup = NettyEventLoopUtil.newEventLoopGroup(Runtime
-                    .getRuntime().availableProcessors() + 1,
-            new NamedThreadFactory(
-                    "bolt-netty-client-worker", true));
+    private static final EventLoopGroup workerGroup = NettyEventLoopUtil.newEventLoopGroup(Runtime .getRuntime().availableProcessors() + 1,
+            new NamedThreadFactory("bolt-netty-client-worker", true));
 
 
-
+    // RpcServer or RpcClient
     private final ConfigurableInstance confInstance;
     private final Codec codec;
+
     //客户端心跳处理器
     private final ChannelHandler heartbeatHandler;
-
+    // 业务逻辑处理器
     private final ChannelHandler handler;
 
     protected Bootstrap bootstrap;
@@ -73,6 +55,7 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory {
 
         this.confInstance = confInstance;
         this.codec = codec;
+        //初始化心跳处理器
         this.heartbeatHandler = heartbeatHandler;
         this.handler = handler;
     }
@@ -124,12 +107,13 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory {
 
     @Override
     public Connection createConnection(Url url) throws Exception {
-         //连接服务端
+         //连接服务端 创建 netty channel
         Channel channel = doCreateConnection(url.getIp(), url.getPort(), url.getConnectTimeout());
 
-        //创建连接
-        Connection conn = new Connection(channel, ProtocolCode.fromBytes(url.getProtocol()),
-                url.getVersion(), url);
+        // 创建 Connection
+        Connection conn = new Connection(channel, ProtocolCode.fromBytes(url.getProtocol()), url.getVersion(), url);
+
+        // 发布 ConnectionEventType.CONNECT 事件
         //触发连接事件
         //此时 ConnectionEventHandler 就会调用 ConnectionEventListener 执行其内的 List<ConnectionEventProcessor> 的 onEvent 方法
         channel.pipeline().fireUserEventTriggered(ConnectionEventType.CONNECT);
@@ -187,6 +171,8 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory {
         if (logger.isDebugEnabled()) {
             logger.debug("connectTimeout of address [{}] is [{}].", address, connectTimeout);
         }
+
+        // 设置连接超时时间
         bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout);
 
         // netty 客户端连接创建服务端

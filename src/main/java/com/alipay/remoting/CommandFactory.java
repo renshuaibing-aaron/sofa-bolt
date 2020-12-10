@@ -21,6 +21,7 @@ import java.net.InetSocketAddress;
 /**
  * Command factory
  *CommandFactory 针对系统异常和业务异常分别作了不同的处理
+ * 命令工厂的设计：创建 RemotingCommand 实例
  * @author xiaomin.cxm
  * @version $Id: CommandFactory.java, v 0.1 Mar 10, 2016 11:24:24 AM yunliang.shi Exp $
  */

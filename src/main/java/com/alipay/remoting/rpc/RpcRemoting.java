@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc;
 
 import com.alipay.remoting.*;
@@ -29,7 +13,8 @@ import org.slf4j.Logger;
 
 /**
  * Rpc remoting capability.
- *
+ *远程调用执行抽象类 服务端和客户端都继承了这个类
+ *   注意这个类的一个静态方法 会初始化两种协议
  * @author jiangping
  * @version $Id: RpcRemoting.java, v 0.1 Mar 6, 2016 9:09:48 PM tao Exp $
  */
@@ -133,11 +118,10 @@ public abstract class RpcRemoting extends BaseRemoting {
      * @throws RemotingException
      * @throws InterruptedException
      */
-    public Object invokeSync(final String addr, final Object request,
-                             final InvokeContext invokeContext, final int timeoutMillis)
+    public Object invokeSync(final String addr, final Object request, final InvokeContext invokeContext, final int timeoutMillis)
             throws RemotingException,
             InterruptedException {
-
+         //"127.0.0.1:8888", request,  null, 30 * 1000
         System.out.println("将 addr 转化为 Url");
         Url url = this.addressParser.parse(addr);
         return this.invokeSync(url, request, invokeContext, timeoutMillis);
@@ -172,23 +156,21 @@ public abstract class RpcRemoting extends BaseRemoting {
      * @throws RemotingException
      * @throws InterruptedException
      */
-    public Object invokeSync(final Connection conn, final Object request,
-                             final InvokeContext invokeContext, final int timeoutMillis)
+    public Object invokeSync(final Connection conn, final Object request, final InvokeContext invokeContext, final int timeoutMillis)
             throws RemotingException,InterruptedException
              {
-        //创建请求对象
-        RemotingCommand requestCommand = toRemotingCommand(request, conn, invokeContext,
-                timeoutMillis);
+        //创建请求对象  序列化
+        RemotingCommand requestCommand = toRemotingCommand(request,conn,invokeContext,timeoutMillis);
 
         preProcessInvokeContext(invokeContext, requestCommand, conn);
 
         //发起请求
-        ResponseCommand responseCommand = (ResponseCommand) super.invokeSync(conn, requestCommand,
-                timeoutMillis);
+        ResponseCommand responseCommand = (ResponseCommand) super.invokeSync(conn, requestCommand, timeoutMillis);
 
         responseCommand.setInvokeContext(invokeContext);
 
         System.out.println("客户端 netty worker 线程接收响应并填充到指定 invokeId 的 InvokeFuture 中，唤醒如下流程");
+        // 解析响应（反序列化）
         Object responseObject = RpcResponseResolver.resolveResponseObject(responseCommand,RemotingUtil.parseRemoteAddress(conn.getChannel()));
 
 
@@ -324,14 +306,14 @@ public abstract class RpcRemoting extends BaseRemoting {
      * @return
      * @throws CodecException
      */
-    protected RemotingCommand toRemotingCommand(Object request, Connection conn,
-                                                InvokeContext invokeContext, int timeoutMillis)
+    protected RemotingCommand toRemotingCommand(Object request, Connection conn, InvokeContext invokeContext, int timeoutMillis)
             throws SerializationException {
         //创建请求对象
         RpcRequestCommand command = this.getCommandFactory().createRequestCommand(request);
 
         if (null != invokeContext) {
             // set client custom serializer for request command if not null
+            //设置调用级别的 Serializer
             Object clientCustomSerializer = invokeContext.get(InvokeContext.BOLT_CUSTOM_SERIALIZER);
             if (null != clientCustomSerializer) {
                 try {
@@ -360,6 +342,7 @@ public abstract class RpcRemoting extends BaseRemoting {
         command.setTimeout(timeoutMillis);
         command.setRequestClass(request.getClass().getName());
         command.setInvokeContext(invokeContext);
+
         //序列化方法(这里是干嘛的)
         command.serialize();
 
@@ -384,8 +367,7 @@ public abstract class RpcRemoting extends BaseRemoting {
      */
     @Override
     protected InvokeFuture createInvokeFuture(RemotingCommand request, InvokeContext invokeContext) {
-        return new DefaultInvokeFuture(request.getId(), null, null, request.getProtocolCode()
-                .getFirstByte(), this.getCommandFactory(), invokeContext);
+        return new DefaultInvokeFuture(request.getId(), null, null, request.getProtocolCode().getFirstByte(), this.getCommandFactory(), invokeContext);
     }
 
     /**

@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc.protocol;
 
 import com.alipay.remoting.*;
@@ -87,9 +71,11 @@ public class RpcCommandHandler implements CommandHandler {
 
     /*
      * Handle the request(s).
+     * SOFABolt 支持批量提交请求
      */
     private void handle(final RemotingContext ctx, final Object msg) {
         try {
+            // 批量提交来的数据
             if (msg instanceof List) {
                 final Runnable handleTask = new Runnable() {
                     @Override
@@ -97,11 +83,14 @@ public class RpcCommandHandler implements CommandHandler {
                         if (logger.isDebugEnabled()) {
                             logger.debug("Batch message! size={}", ((List<?>) msg).size());
                         }
+                        // 循环处理
                         for (final Object m : (List<?>) msg) {
                             RpcCommandHandler.this.process(ctx, m);
                         }
                     }
                 };
+                // 批量提交的数据是否在 processorManager#defaultExecutor 中执行
+                // -Dbolt.rpc.dispatch-msg-list-in-default-executor=true
                 if (RpcConfigManager.dispatch_msg_list_in_default_executor()) {
                     // If msg is list ,then the batch submission to biz threadpool can save io thread.
                     // See com.alipay.remoting.decoder.ProtocolDecoder
@@ -110,6 +99,7 @@ public class RpcCommandHandler implements CommandHandler {
                     handleTask.run();
                 }
             } else {
+                // 处理单条数据
                 process(ctx, msg);
             }
         } catch (final Throwable t) {

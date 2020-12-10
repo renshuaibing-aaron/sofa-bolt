@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.codec;
 
 import com.alipay.remoting.Connection;
@@ -45,7 +29,7 @@ public class ProtocolCodeBasedDecoder extends AbstractBatchDecoder {
     public static final int DEFAULT_ILLEGAL_PROTOCOL_VERSION_LENGTH = -1;
 
     /**
-     * the length of protocol code
+     * the length of protocol code  默认是1
      */
     protected int protocolCodeLength;
 
@@ -56,7 +40,7 @@ public class ProtocolCodeBasedDecoder extends AbstractBatchDecoder {
 
     /**
      * decode the protocol code
-     *
+     *解码出 protocol_code
      * @param in input byte buf
      * @return an instance of ProtocolCode
      */
@@ -107,8 +91,9 @@ public class ProtocolCodeBasedDecoder extends AbstractBatchDecoder {
             Protocol protocol = ProtocolManager.getProtocol(protocolCode);
             if (null != protocol) {
 
-                // 恢复读指针到解析 protocolCode 之前
+                // todo 恢复读指针到解析 protocolCode 之前
                 in.resetReaderIndex();
+                // 从通信协议里面获取解码器类进行实际解码
                 protocol.getDecoder().decode(ctx, in, out);
             } else {
                 throw new CodecException("Unknown protocol code: [" + protocolCode

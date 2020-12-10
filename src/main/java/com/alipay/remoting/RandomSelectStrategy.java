@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting;
 
 import com.alipay.remoting.config.Configs;
@@ -72,6 +56,7 @@ public class RandomSelectStrategy implements ConnectionSelectStrategy {
             }
 
             Connection result = null;
+            // 如果开启了 连接监控，则从状态为健康的连接中获取连接；否则直接从 conns 全连接中随机获取
             if (null != this.globalSwitch
                     && this.globalSwitch.isOn(GlobalSwitch.CONN_MONITOR_SWITCH)) {
                 List<Connection> serviceStatusOnConns = new ArrayList<Connection>();
@@ -110,6 +95,7 @@ public class RandomSelectStrategy implements ConnectionSelectStrategy {
         int size = conns.size();
         int tries = 0;
         Connection result = null;
+        // 不断重试获取状态为可用的 Connection
         while ((result == null || !result.isFine()) && tries++ < MAX_TIMES) {
             result = conns.get(this.random.nextInt(size));
         }

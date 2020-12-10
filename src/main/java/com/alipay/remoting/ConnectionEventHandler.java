@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting;
 
 import com.alipay.remoting.config.switches.GlobalSwitch;
@@ -36,7 +20,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Log the channel status event.
- *
+ * Connection 事件处理器，处理两类事件
+ *   Netty 定义的事件：例如 connect，channelActive 等
+ *   SOFABolt 定义的事件：事件类型 ConnectionEventType
  * @author jiangping
  * @version $Id: ConnectionEventHandler.java, v 0.1 Oct 10, 2016 2:07:24 PM tao Exp $
  */
@@ -139,10 +125,12 @@ public class ConnectionEventHandler extends ChannelDuplexHandler {
         Attribute attr = ctx.channel().attr(Connection.CONNECTION);
         if (null != attr) {
             // add reconnect task
+            // 是否开启了重连开关
             if (this.globalSwitch != null
                     && this.globalSwitch.isOn(GlobalSwitch.CONN_RECONNECT_SWITCH)) {
                 Connection conn = (Connection) attr.get();
                 if (reconnectManager != null) {
+                    // 将当前连接的 url 加入到待连接队列中
                     reconnectManager.addReconnectTask(conn.getUrl());
                 }
             }
@@ -271,7 +259,7 @@ public class ConnectionEventHandler extends ChannelDuplexHandler {
 
     /**
      * Dispatch connection event.
-     *
+     *创建连接事件执行器（后续 ConnectionEventListener 中的 ConnectionEventProcessor 的执行都由该线程池来完成）
      * @author jiangping
      * @version $Id: ConnectionEventExecutor.java, v 0.1 Mar 4, 2016 9:20:15 PM tao Exp $
      */

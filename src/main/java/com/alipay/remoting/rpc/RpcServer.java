@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc;
 
 import com.alipay.remoting.*;
@@ -134,7 +118,9 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
      *
      */
     public RpcServer(int port) {
-        this(port, false);
+        // 服务端连接器管理
+        //this(port, false);
+        this(port, true);
     }
 
     /**
@@ -166,6 +152,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
         super(port);
         /* server connection management feature enabled or not, default value false, means disabled. */
         //false
+        // 是否开启服务端连接管理功能
         if (manageConnection) {
             this.switches().turnOn(GlobalSwitch.SERVER_MANAGE_CONNECTION_SWITCH);
         }
@@ -188,6 +175,7 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     public RpcServer(String ip, int port, boolean manageConnection) {
         super(ip, port);
         /* server connection management feature enabled or not, default value false, means disabled. */
+        // 是否开启服务端连接管理功能
         if (manageConnection) {
             this.switches().turnOn(GlobalSwitch.SERVER_MANAGE_CONNECTION_SWITCH);
         }
@@ -214,7 +202,9 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
         if (this.addressParser == null) {
             this.addressParser = new RpcAddressParser();
         }
+        // 服务端是否开启连接管理功能
         if (this.switches().isOn(GlobalSwitch.SERVER_MANAGE_CONNECTION_SWITCH)) {
+
             this.connectionEventHandler = new RpcConnectionEventHandler(switches());
             this.connectionManager = new DefaultConnectionManager(new RandomSelectStrategy());
             this.connectionEventHandler.setConnectionManager(this.connectionManager);
@@ -224,8 +214,6 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
             //关联连接事件处理器与连接事件监听器
             //关联连接事件处理器与连接事件监听器，并由连接事件处理器中的连接执行器来执行连接监听器中的 processor
             this.connectionEventHandler = new ConnectionEventHandler(switches());
-
-
             this.connectionEventHandler.setConnectionEventListener(this.connectionEventListener);
         }
 
@@ -285,8 +273,10 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
                 pipeline.addLast("encoder", codec.newEncoder());
 
                 if (idleSwitch) {
+                    // 空闲检测处理器
                     pipeline.addLast("idleStateHandler", new IdleStateHandler(0, 0, idleTime,
                             TimeUnit.MILLISECONDS));
+                    // 服务端心跳处理器
                     pipeline.addLast("serverIdleHandler", serverIdleHandler);
                 }
                 //链接管理器
@@ -306,11 +296,17 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
              */
             private void createConnection(SocketChannel channel) {
                 Url url = addressParser.parse(RemotingUtil.parseRemoteAddress(channel));
+
+                // 是否开启了服务端连接管理功能
                 if (switches().isOn(GlobalSwitch.SERVER_MANAGE_CONNECTION_SWITCH)) {
+                    // 如果开启了，创建 Connection，并添加到 connectionManager
                     connectionManager.add(new Connection(channel, url), url.getUniqueKey());
                 } else {
+                    // 否则，直接创建 Connection
                     new Connection(channel, url);
                 }
+                // 发布 ConnectionEventType.CONNECT 事件
+                System.out.println("【发布 ConnectionEventType.CONNECT 事件】");
                 channel.pipeline().fireUserEventTriggered(ConnectionEventType.CONNECT);
             }
         });
@@ -464,11 +460,12 @@ public class RpcServer extends AbstractRemotingServer implements RemotingServer 
     public void oneway(final Url url, final Object request, final InvokeContext invokeContext)
             throws RemotingException,
             InterruptedException {
-        check();
+        check(); // 1. 查看是否启动了服务端连接管理功能，如果没有，直接抛出异常
         this.rpcRemoting.oneway(url, request, invokeContext);
     }
 
     /**
+     * // 如果没有开启服务端连接管理功能，只能通过 Connection 对客户端发起调用，无法通过 Url 或 addr 等发起调用
      * One way invocation using a {@link Connection} <br>
      * <p>
      * Notice:<br>

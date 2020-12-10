@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc.protocol;
 
 import com.alipay.remoting.*;
@@ -34,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Handler for heart beat.
- *
+ *  客户端真正的空闲处理器，也叫心跳触发器 (注意这里是客户端使用的)
  * @author jiangping
  * @version $Id: RpcHeartbeatTrigger.java, v 0.1 2015-9-29 PM3:17:45 tao Exp $
  */
@@ -146,6 +130,7 @@ public class RpcHeartbeatTrigger implements HeartbeatTrigger {
                         heartbeatTimes, heartbeatId, RemotingUtil.parseRemoteAddress(ctx.channel()));
             }
             // 发送 heartbeat
+            System.out.println("【客户端发送心跳】");
             ctx.writeAndFlush(heartbeat).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {

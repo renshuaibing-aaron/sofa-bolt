@@ -1,20 +1,5 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting;
+
 
 import com.alipay.remoting.exception.RemotingException;
 
@@ -23,17 +8,19 @@ import java.util.Map;
 
 /**
  * Connection manager of connection pool
- *
+ *ConnectionManager 连接管理器：是对外的门面，包含所有与 Connection 相关的对外的接口操作
  * @author xiaomin.cxm
  * @version $Id: ConnectionManager.java, v 0.1 Mar 7, 2016 2:42:46 PM xiaomin.cxm Exp $
  */
 public interface ConnectionManager extends Scannable {
     /**
+     *初始化操作
      * init
      */
     void init();
 
     /**
+     * 添加 Connection 到 ConnectionPool（根据poolKey）
      * Add a connection to {@link ConnectionPool}.
      * If it contains multiple pool keys, this connection will be added to multiple {@link ConnectionPool} too.
      *
@@ -50,6 +37,7 @@ public interface ConnectionManager extends Scannable {
     void add(Connection connection, String poolKey);
 
     /**
+     * 根据 poolKey 从 ConnectionPool 中获取 Connection
      * Get a connection from {@link ConnectionPool} with the specified poolKey.
      *
      * @param poolKey unique key of a {@link ConnectionPool}
@@ -60,6 +48,7 @@ public interface ConnectionManager extends Scannable {
     Connection get(String poolKey);
 
     /**
+     * 根据 poolKey 从 ConnectionPool 中删除 Connection 并 close
      * Get all connections from {@link ConnectionPool} with the specified poolKey.
      *
      * @param poolKey unique key of a {@link ConnectionPool}
@@ -101,6 +90,7 @@ public interface ConnectionManager extends Scannable {
     void removeAll();
 
     /**
+     * 检测 connection 是否可用
      * check a connection whether available, if not, throw RemotingException
      *
      * @param connection target connection
@@ -116,6 +106,8 @@ public interface ConnectionManager extends Scannable {
     int count(String poolKey);
 
     /**
+     *根据 url 从 ConnectionPool 中获取 Connection，如果 ConnectionPool 为null，则创建 ConnectionPool，并创建 Connection 到 ConnectionPool
+     *创建的 Connection 的数量由 Url#getConnNum() 指定，也可以直接在 addr 上拼接 "_CONNECTIONNUM=10"
      * Get a connection using {@link Url}, if {@code null} then create and add into {@link ConnectionPool}.
      * The connection number of {@link ConnectionPool} is decided by {@link Url#getConnNum()}
      *
@@ -137,7 +129,7 @@ public interface ConnectionManager extends Scannable {
 
     /**
      * Create a connection using specified {@link Url}.
-     *
+     *创建连接
      * @param url {@link Url} contains connect infos.
      */
     Connection create(Url url) throws RemotingException;

@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc.protocol;
 
 import com.alipay.remoting.*;
@@ -72,11 +56,14 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
             throws Exception {
         System.out.println("从 CommandHandler 中获取 CommandCode 为 REQUEST 的 RemotingProcessor 实例 RpcRequestProcessor，之后使用 RpcRequestProcessor 进行请求处理");
 
-        // 反序列化clazz + 根据clazz获取UserProcessor
+        // 首先反序列化 clazzName，因为需要 clazzName 来获取 UserProcessor，如果处理 clazzName 的 UserProcessor 不存在，则直接返回错误
         if (!deserializeRequestCommand(ctx, cmd, RpcDeserializeLevel.DESERIALIZE_CLAZZ)) {
             return;
         }
+
+        // 根据clazz获取UserProcessor
         UserProcessor userProcessor = ctx.getUserProcessor(cmd.getRequestClass());
+
         if (userProcessor == null) {
             String errMsg = "No user processor found for request: " + cmd.getRequestClass();
             logger.error(errMsg);
@@ -103,6 +90,9 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
         // to check whether get executor using executor selector
         // 如果指定不是在IO线程处理请求，则先获取线程池，创建ProcessTask，在新的线程池执行
         // 线程池的选择：userProcessor.executorSelector -> userProcessor.executor -> RemotingProcessor.executor -> ProcessorManager.defaultExecutor
+        // 看是否配置了 UserProcessor.executorSelector，即线程池选择器，
+        // 如果配置了：则需要反序列化出 header，因为 executorSelector 需要根据 header 去选择 executor；content 在异步线程池进行反序列化
+        // 如果没有配置：则 header 和 content 都在选出的异步线程池进行反序列化
         if (null == userProcessor.getExecutorSelector()) {
             executor = userProcessor.getExecutor();
         } else {
@@ -140,9 +130,11 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
         }
         debugLog(ctx, cmd, currentTimestamp);
         // decode request all
+        // 反序列化全部
         if (!deserializeRequestCommand(ctx, cmd, RpcDeserializeLevel.DESERIALIZE_ALL)) {
             return;
         }
+        //反序列化header、content
         dispatchToUserProcessor(ctx, cmd);
     }
 
@@ -160,6 +152,7 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
         if (type != RpcCommandType.REQUEST_ONEWAY) {
             RemotingCommand serializedResponse = response;
             try {
+                // 响应序列化
                 response.serialize();
             } catch (SerializationException e) {
                 String errMsg = "SerializationException occurred when sendResponseIfNecessary in RpcRequestProcessor, id="
@@ -180,7 +173,7 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
                 serializedResponse = this.getCommandFactory()
                         .createExceptionResponse(id, t, errMsg);
             }
-
+            // Netty 发送响应
             ctx.writeAndFlush(serializedResponse).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -223,6 +216,7 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
         UserProcessor processor = ctx.getUserProcessor(cmd.getRequestClass());
         if (processor instanceof AsyncUserProcessor) {
             try {
+                //
                 processor.handleRequest(processor.preHandleRequest(ctx, cmd.getRequestObject()),
                         new RpcAsyncContext(ctx, cmd, this), cmd.getRequestObject());
             } catch (RejectedExecutionException e) {
@@ -270,7 +264,7 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
             result = true;
         } catch (DeserializationException e) {
             logger.error("DeserializationException occurred when process in RpcRequestProcessor, id={}, deserializeLevel={}",
-                            cmd.getId(), RpcDeserializeLevel.valueOf(level), e);
+                    cmd.getId(), RpcDeserializeLevel.valueOf(level), e);
             sendResponseIfNecessary(ctx, cmd.getType(), this.getCommandFactory()
                     .createExceptionResponse(cmd.getId(), ResponseStatus.SERVER_DESERIAL_EXCEPTION, e));
             result = false;
@@ -356,7 +350,6 @@ public class RpcRequestProcessor extends AbstractRemotingProcessor<RpcRequestCom
             this.ctx = ctx;
             this.msg = msg;
         }
-
         /**
          * @see java.lang.Runnable#run()
          */

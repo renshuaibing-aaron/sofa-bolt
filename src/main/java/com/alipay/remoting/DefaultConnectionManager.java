@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting;
 
 import com.alipay.remoting.config.ConfigManager;
@@ -437,8 +421,11 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
         //System.out.println("创建一个 Callable<ConnectionPool> task");
 
         //参数：poolkey: 127.0.0.1:8999 callable: 上述的 ConnectionPoolCall 实例
+        // 创建一个 Callable<ConnectionPool> task
+        ConnectionPoolCall connectionPoolCall = new ConnectionPoolCall(url);
 
-        ConnectionPool pool = this.getConnectionPoolAndCreateIfAbsent(url.getUniqueKey(), new ConnectionPoolCall(url));
+        //1.1 获取或者创建 poolKey 的 ConnectionPool
+        ConnectionPool pool = this.getConnectionPoolAndCreateIfAbsent(url.getUniqueKey(),connectionPoolCall );
 
 
         if (null != pool) {
@@ -565,31 +552,36 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
         RunStateRecordedFutureTask<ConnectionPool> initialTask;
         ConnectionPool pool = null;
 
-        int retry = DEFAULT_RETRY_TIMES;
+        int retry = DEFAULT_RETRY_TIMES;  //2
 
         int timesOfResultNull = 0;
         int timesOfInterrupt = 0;
 
         for (int i = 0; (i < retry) && (pool == null); ++i) {
-
+            // 1. 根据 poolKey 从 connTasks 获取 RunStateRecordedFutureTask 实例
             initialTask = this.connTasks.get(poolKey);
-
-
+            // 2. 如果为 null，创建一个 RunStateRecordedFutureTask 实例，并设置 {poolKey, RunStateRecordedFutureTask 实例} 到 connTasks 中
             if (null == initialTask) {
 
                 // 包装 callable
                 initialTask = new RunStateRecordedFutureTask<ConnectionPool>(callable);
-
                 //下一次就直接从该缓存取出任务 initialTask（之后直接从 task 中取出 ConnectionPool），不再 new
                 initialTask = this.connTasks.putIfAbsent(poolKey, initialTask);
+                System.out.println(Thread.currentThread()+"========第一次取initialTask============"+initialTask);
+                // 注意：这里为什么做二次判断？
+                // 在高并发的情况下，有可能同一个 poolKey 下的两个 RpcClient 同时走到这里（我们无法预判用户会怎样使用 Bolt），那么在 putIfAbsent 的时候只有一个可以成功（否则就会创建双倍的预期连接数），
+                // 则先成功的返回 null，后成功的返回旧值，也就是前边插入的 initialTask 实例，一定不为 null
                 if (null == initialTask) {
                     initialTask = this.connTasks.get(poolKey);
                     //ConnectionPoolCall.call()方法
+                    // 3. 直接运行 RunStateRecordedFutureTask 实例
                     initialTask.run();
                 }
             }
 
             try {
+                //阻塞的获取连接池
+                // 从 RunStateRecordedFutureTask 实例中获取 ConnectionPool
                 pool = initialTask.get();
                 if (null == pool) {
                     if (i + 1 < retry) {
@@ -597,8 +589,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                         continue;
                     }
                     this.connTasks.remove(poolKey);
-                    String errMsg = "Get future task result null for poolKey [" + poolKey
-                            + "] after [" + (timesOfResultNull + 1) + "] times try.";
+                    String errMsg = "Get future task result null for poolKey [" + poolKey + "] after [" + (timesOfResultNull + 1) + "] times try.";
                     throw new RemotingException(errMsg);
                 }
             } catch (InterruptedException e) {
@@ -649,10 +640,12 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
     private void healIfNeed(ConnectionPool pool, Url url) throws RemotingException,
             InterruptedException {
         String poolKey = url.getUniqueKey();
+        // 同步创建的连接在创建时一定是成功的，否则抛出异常；一旦连接失效，不再重连？
         // only when async creating connections done
         // and the actual size of connections less than expected, the healing task can be run.
         if (pool.isAsyncCreationDone() && pool.size() < url.getConnNum()) {
             FutureTask<Integer> task = this.healTasks.get(poolKey);
+            // 仅仅用于防并发，因为在 task 执行一次之后，就会从 healTasks 移除
             if (null == task) {
                 task = new FutureTask<Integer>(new HealConnectionCall(url, pool));
                 task = this.healTasks.putIfAbsent(poolKey, task);
@@ -671,6 +664,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                 this.healTasks.remove(poolKey);
                 throw e;
             } catch (ExecutionException e) {
+                // heal task is one-off 一次性的, remove from cache directly after run
                 this.healTasks.remove(poolKey);
                 Throwable cause = e.getCause();
                 if (cause instanceof RemotingException) {
@@ -691,25 +685,33 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
      * @param pool
      * @param taskName
      * @param syncCreateNumWhenNotWarmup you can specify this param to ensure at least desired number of connections available in sync way
+     *  指定了同步创建的个数，默认为1，即需要同步创建一个 Connection，其他的都异步创建
      * @throws RemotingException
      */
+
     private void doCreate(final Url url, final ConnectionPool pool, final String taskName,
                           final int syncCreateNumWhenNotWarmup) throws RemotingException {
         //创建 poolKey 的 Connection 并添加到 ConnectionPool 中
-        final int actualNum = pool.size();
-        final int expectNum = url.getConnNum();
+        final int actualNum = pool.size(); // 池中已有连接数
+        final int expectNum = url.getConnNum();   // 期盼总共的连接数
         if (actualNum < expectNum) {
             if (logger.isDebugEnabled()) {
                 logger.debug("actual num {}, expect num {}, task name {}", actualNum, expectNum,
                         taskName);
             }
+            // 是否配置了连接预热（即需要同步创建好所有的 Connection）
             if (url.isConnWarmup()) {
                 for (int i = actualNum; i < expectNum; ++i) {
                     //创建connection
+                    // 创建 Connection
                     Connection connection = create(url);
+                    // 将 Connection 塞入 ConnectionPool
                     pool.add(connection);
                 }
+                // 没有配置连接预热，默认同步创建一个 Connection，剩余的 Connection 异步创建
+                //todo  这里也有异步创建连接的情况
             } else {
+                // 同步创建 Connection，syncCreateNumWhenNotWarmup 指定了同步创建的个数
                 if (syncCreateNumWhenNotWarmup < 0 || syncCreateNumWhenNotWarmup > url.getConnNum()) {
                     throw new IllegalArgumentException(
                             "sync create number when not warmup should be [0," + url.getConnNum() + "]");
@@ -726,6 +728,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                         return;
                     }
                 }
+                // 创建异步创建 Connection 的连接池
                 // initialize executor in lazy way
                 initializeExecutor();
                 pool.markAsyncCreationStart();// mark the start of async
@@ -901,6 +904,8 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
 
         @Override
         public ConnectionPool call() throws Exception {
+            //不明白这里为什么这么使用 也不是线程啊
+            System.out.println(Thread.currentThread()+"===获取或者创建 poolKey 的 ConnectionPool==============");
             //获取或者创建 poolKey 的 ConnectionPool
             final ConnectionPool pool = new ConnectionPool(connectionSelectStrategy);
 
@@ -913,6 +918,7 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
                     throw e;
                 }
             }
+            // 返回 ConnectionPool
             return pool;
         }
 
@@ -940,7 +946,9 @@ public class DefaultConnectionManager implements ConnectionManager, ConnectionHe
 
         @Override
         public Integer call() throws Exception {
+            // 创建连接（与建连一样，不再分析）
             doCreate(this.url, this.pool, this.getClass().getSimpleName(), 0);
+            // 返回连接池中的连接数量
             return this.pool.size();
         }
     }

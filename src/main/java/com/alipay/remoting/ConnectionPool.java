@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting;
 
 import com.alipay.remoting.log.BoltLoggerFactory;
@@ -25,7 +9,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Connection pool
- *
+ *ConnectionPool 连接池：存储 { uniqueKey, List<Connection> } ，
+ * uniqueKey 默认为 ip:port；包含 ConnectionSelectStrategy，从 pool 中选择 Connection
  * @author xiaomin.cxm
  * @version $Id: ConnectionPool.java, v 0.1 Mar 8, 2016 11:04:54 AM xiaomin.cxm Exp $
  */
@@ -107,6 +92,7 @@ public class ConnectionPool implements Scannable {
         if (res) {
             connection.decreaseRef();
         }
+        //// 如果该连接没有引用了，则 close 连接
         if (connection.noRef()) {
             connection.close();
         }
@@ -132,6 +118,7 @@ public class ConnectionPool implements Scannable {
         if (null != this.conns) {
             List<Connection> snapshot = new ArrayList<Connection>(this.conns);
             if (snapshot.size() > 0) {
+                // 使用 ConnectionSelectStrategy 从 List<Connection> 选一个 Connection
                 return this.strategy.select(snapshot);
             } else {
                 return null;

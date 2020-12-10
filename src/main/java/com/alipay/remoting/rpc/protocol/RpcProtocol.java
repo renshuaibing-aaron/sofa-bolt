@@ -1,25 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.alipay.remoting.rpc.protocol;
 
 import com.alipay.remoting.*;
 import com.alipay.remoting.rpc.RpcCommandFactory;
 
 /**
+ *
+ * 请求命令
  * Request command protocol for v1
  * 0     1     2           4           6           8          10           12          14         16
  * +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
@@ -41,6 +27,7 @@ import com.alipay.remoting.rpc.RpcCommandFactory;
  * headerLen: length of header
  * contentLen: length of content
  * <p>
+ *  响应命令
  * Response command protocol for v1
  * 0     1     2     3     4           6           8          10           12          14         16
  * +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
@@ -58,11 +45,17 @@ import com.alipay.remoting.rpc.RpcCommandFactory;
  * @version $Id: RpcProtocol.java, v 0.1 2015-9-28 PM7:04:04 tao Exp $
  */
 public class RpcProtocol implements Protocol {
+
+    /**
+     * 协议的标识 用来查找编解码器
+     */
     public static final byte PROTOCOL_CODE = (byte) 1;
     private static final int REQUEST_HEADER_LEN = 22;
     private static final int RESPONSE_HEADER_LEN = 20;
+
     private CommandEncoder encoder;
     private CommandDecoder decoder;
+
     private HeartbeatTrigger heartbeatTrigger;
     private CommandHandler commandHandler;
     private CommandFactory commandFactory;
@@ -79,6 +72,7 @@ public class RpcProtocol implements Protocol {
         //最底层的连接心跳处理器
         this.heartbeatTrigger = new RpcHeartbeatTrigger(this.commandFactory);
 
+        //命令处理器
         this.commandHandler = new RpcCommandHandler(this.commandFactory);
     }
 
